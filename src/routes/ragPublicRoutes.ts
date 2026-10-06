@@ -1,0 +1,15 @@
+import express from 'express';
+import * as ragChatController from '../controllers/ragChatController.js';
+
+const router = express.Router();
+
+/**
+ * Public RAG Bot Routes
+ * Mounted at /api/v1/bots (no auth required)
+ */
+
+router.get('/:botSlug/config', ragChatController.getWidgetConfig);
+router.post('/:botSlug/chat', ragChatController.ragChat);
+router.post('/:botSlug/rate', ragChatController.submitFeedback);
+
+export default router;
