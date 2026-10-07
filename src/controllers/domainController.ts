@@ -4,7 +4,7 @@ import { DomainService } from '../services/domainService.js';
 export class DomainController {
   static async addDomain(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { domain } = req.body;
 
       if (!domain) {
@@ -16,7 +16,7 @@ export class DomainController {
 
       const domainRecord = await DomainService.addDomain(tenantId, domain);
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: {
           ...domainRecord.toObject(),
@@ -25,7 +25,7 @@ export class DomainController {
         message: 'Domain added. Please add TXT record to verify.'
       });
     } catch (error: any) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: error.message
       });
@@ -34,18 +34,18 @@ export class DomainController {
 
   static async verifyDomain(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { domainId } = req.params;
       const { token } = req.body;
 
-      const verified = await DomainService.verifyDomain(domainId, tenantId, token);
+      await DomainService.verifyDomain(domainId, tenantId, token);
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Domain verified successfully'
       });
     } catch (error: any) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: error.message
       });
@@ -54,18 +54,18 @@ export class DomainController {
 
   static async activateDomain(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { domainId } = req.params;
 
       const domain = await DomainService.activateDomain(domainId, tenantId);
 
-      res.json({
+      return res.json({
         success: true,
         data: domain,
         message: 'Domain is now active'
       });
     } catch (error: any) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: error.message
       });
@@ -74,15 +74,15 @@ export class DomainController {
 
   static async getDomains(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const domains = await DomainService.getDomains(tenantId);
 
-      res.json({
+      return res.json({
         success: true,
         data: domains
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -91,7 +91,7 @@ export class DomainController {
 
   static async deleteDomain(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { domainId } = req.params;
 
       const deleted = await DomainService.deleteDomain(domainId, tenantId);
@@ -103,12 +103,12 @@ export class DomainController {
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Domain deleted successfully'
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -117,18 +117,18 @@ export class DomainController {
 
   static async setPrimaryDomain(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { domainId } = req.params;
 
       const domain = await DomainService.setPrimaryDomain(domainId, tenantId);
 
-      res.json({
+      return res.json({
         success: true,
         data: domain,
         message: 'Primary domain updated'
       });
     } catch (error: any) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: error.message
       });

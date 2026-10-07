@@ -4,7 +4,7 @@
  * Handles search endpoints
  */
 
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../middleware';
 import searchService from '../services/searchService.js';
 import { embeddingService } from '../services/embeddingService.js';
@@ -12,7 +12,7 @@ import { embeddingService } from '../services/embeddingService.js';
 /**
  * Search content
  */
-export const searchContent = asyncHandler(async (req: Request, res: Response) => {
+export const searchContent = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId } = req.params;
   const {
     q,
@@ -33,10 +33,10 @@ export const searchContent = asyncHandler(async (req: Request, res: Response) =>
   } = req.query;
 
   if (!q) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Search query (q) is required',
-    });
+    }); return;
   }
 
   const results = await searchService.search(projectId, {
@@ -73,11 +73,11 @@ export const searchContent = asyncHandler(async (req: Request, res: Response) =>
   if (mode === 'semantic' || mode === 'hybrid') {
      const semanticResults = await embeddingService.semanticSearch(projectId, q as string, parseInt(limit as string));
      
-     if (mode === 'semantic') {
-         finalResults = { ...results, items: semanticResults, total: semanticResults.length };
+      if (mode === 'semantic') {
+         finalResults = { ...results, items: semanticResults, total: semanticResults.length } as any;
      } else {
          // Hybrid: combine text + semantic
-         const combined = [...results.items];
+         const combined = [...(results as any).items];
          const existingIds = new Set(combined.map(r => r._id?.toString()));
          
          semanticResults.forEach(sr => {
@@ -85,7 +85,7 @@ export const searchContent = asyncHandler(async (req: Request, res: Response) =>
                  combined.push(sr);
              }
          });
-         finalResults = { ...results, items: combined.slice(0, parseInt(limit as string)), total: combined.length };
+         finalResults = { ...results, items: combined.slice(0, parseInt(limit as string)), total: combined.length } as any;
      }
   }
 
@@ -98,15 +98,15 @@ export const searchContent = asyncHandler(async (req: Request, res: Response) =>
 /**
  * Autocomplete suggestions
  */
-export const autocomplete = asyncHandler(async (req: Request, res: Response) => {
+export const autocomplete = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId } = req.params;
   const { q, limit = 10 } = req.query;
 
   if (!q) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Query (q) is required',
-    });
+    }); return;
   }
 
   const suggestions = await searchService.autocomplete(
@@ -124,7 +124,7 @@ export const autocomplete = asyncHandler(async (req: Request, res: Response) => 
 /**
  * Reindex content
  */
-export const reindex = asyncHandler(async (req: Request, res: Response) => {
+export const reindex = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId } = req.params;
 
   await searchService.reindexAll(projectId);
@@ -138,7 +138,7 @@ export const reindex = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Get search status
  */
-export const getSearchStatus = asyncHandler(async (req: Request, res: Response) => {
+export const getSearchStatus = asyncHandler(async (_req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const isAvailable = searchService.isAvailable();
 
   res.json({

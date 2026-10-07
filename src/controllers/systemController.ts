@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { Tenant, User, ErrorLog, Coupon, Project, Content } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 
@@ -6,7 +6,7 @@ export const systemController = {
   /**
    * Get platform-wide statistics
    */
-  getStats: asyncHandler(async (req: Request, res: Response) => {
+  getStats: asyncHandler(async (_req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const [
       tenantCount,
       userCount,
@@ -41,7 +41,7 @@ export const systemController = {
   /**
    * Get list of all tenants
    */
-  getTenants: asyncHandler(async (req: Request, res: Response) => {
+  getTenants: asyncHandler(async (_req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const tenants = await Tenant.find()
       .select('name slug email subscription isActive createdAt')
       .sort({ createdAt: -1 });
@@ -55,7 +55,7 @@ export const systemController = {
   /**
    * Get system error logs
    */
-  getErrorLogs: asyncHandler(async (req: Request, res: Response) => {
+  getErrorLogs: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const { severity, isFixed, page = 1, limit = 20 } = req.query;
     
     const query: any = {};
@@ -90,7 +90,7 @@ export const systemController = {
   /**
    * Mark error as fixed
    */
-  markErrorFixed: asyncHandler(async (req: Request, res: Response) => {
+  markErrorFixed: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const log = await ErrorLog.findByIdAndUpdate(
       id,
@@ -114,7 +114,7 @@ export const systemController = {
   /**
    * Coupon Management: Create
    */
-  createCoupon: asyncHandler(async (req: Request, res: Response) => {
+  createCoupon: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const coupon = await Coupon.create(req.body);
     res.status(201).json({
       success: true,
@@ -125,7 +125,7 @@ export const systemController = {
   /**
    * Coupon Management: List
    */
-  getCoupons: asyncHandler(async (req: Request, res: Response) => {
+  getCoupons: asyncHandler(async (_req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const coupons = await Coupon.find().sort({ createdAt: -1 });
     res.json({
       success: true,
@@ -136,7 +136,7 @@ export const systemController = {
   /**
    * Log critical errors from frontend
    */
-  logFrontendError: asyncHandler(async (req: Request, res: Response) => {
+  logFrontendError: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const { message, stack, severity, url, source, lineno, colno } = req.body;
     
     const log = await ErrorLog.create({

@@ -19,12 +19,12 @@ export class EmailTemplateController {
                 .populate('createdBy', 'name email')
                 .sort({ createdAt: -1 });
 
-            res.json({
+            return res.json({
                 success: true,
                 data: templates,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch templates',
                 error: error.message,
@@ -47,12 +47,12 @@ export class EmailTemplateController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: template,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch template',
                 error: error.message,
@@ -84,13 +84,13 @@ export class EmailTemplateController {
                 createdBy: userId,
             });
 
-            res.status(201).json({
+            return res.status(201).json({
                 success: true,
                 data: template,
                 message: 'Template created successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to create template',
                 error: error.message,
@@ -124,13 +124,13 @@ export class EmailTemplateController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: template,
                 message: 'Template updated successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to update template',
                 error: error.message,
@@ -152,12 +152,12 @@ export class EmailTemplateController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Template deleted successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to delete template',
                 error: error.message,
@@ -181,14 +181,14 @@ export class EmailTemplateController {
             }
 
             // Replace variables
-            const preview = template.replaceVariables(variables || {});
+            const preview = (template as any).replaceVariables(variables || {});
 
-            res.json({
+            return res.json({
                 success: true,
                 data: preview,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to preview template',
                 error: error.message,
@@ -219,7 +219,7 @@ export class EmailTemplateController {
             }
 
             // Replace variables
-            const { subject, body } = template.replaceVariables(variables || {});
+            const { subject, body } = (template as any).replaceVariables(variables || {});
 
             // Create transporter (configure with your email service)
             const transporter = nodemailer.createTransport({
@@ -240,12 +240,12 @@ export class EmailTemplateController {
                 html: body,
             });
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Test email sent successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to send test email',
                 error: error.message,

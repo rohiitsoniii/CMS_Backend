@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getSystemHealth } from '../utils/healthCheck.js';
 import { statusController } from '../controllers/statusController.js';
+import { authenticateJWT } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -36,8 +37,14 @@ router.get('/health', (_req, res) => {
 // System Status for StatusPage
 router.get('/status', statusController.getSystemStatus);
 
-// Metrics scrape endpoint for Prometheus
-router.get('/metrics', async (_req, res) => {
+// Metrics scrape endpoint for Prometheus.
+// Process metrics fingerprint the host — require auth in production
+// unless explicitly exposed (METRICS_PUBLIC=true for scrapers).
+const metricsGate =
+  process.env.NODE_ENV === 'production' && process.env.METRICS_PUBLIC !== 'true'
+    ? [authenticateJWT]
+    : [];
+router.get('/metrics', ...metricsGate, async (_req, res) => {
   try {
     const { register } = await import('../utils/metrics.js');
     res.set('Content-Type', register.contentType);

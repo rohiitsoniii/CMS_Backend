@@ -6,9 +6,9 @@ export const fieldPermissionsController = {
   async setPermission(req: Request, res: Response) {
     try {
       const permission = await FieldPermissionsService.setFieldPermission(req.body);
-      res.json(permission);
+      return res.json(permission);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -17,9 +17,9 @@ export const fieldPermissionsController = {
     try {
       const { contentTypeId, roleId } = req.params;
       const permissions = await FieldPermissionsService.getFieldPermissions(contentTypeId, roleId);
-      res.json(permissions);
+      return res.json(permissions);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -36,9 +36,9 @@ export const fieldPermissionsController = {
         action as 'read' | 'write'
       );
 
-      res.json({ canAccess });
+      return res.json({ canAccess });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -54,9 +54,9 @@ export const fieldPermissionsController = {
         action as 'read' | 'write'
       );
 
-      res.json(fields);
+      return res.json(fields);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -65,9 +65,9 @@ export const fieldPermissionsController = {
     try {
       const { permissions } = req.body;
       const results = await FieldPermissionsService.bulkSetPermissions(permissions);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -76,9 +76,9 @@ export const fieldPermissionsController = {
     try {
       const { permissionId } = req.params;
       await FieldPermissionsService.deleteFieldPermission(permissionId);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -87,9 +87,9 @@ export const fieldPermissionsController = {
     try {
       const { contentTypeId } = req.params;
       const permissions = await FieldPermissionsService.getAllPermissions(contentTypeId);
-      res.json(permissions);
+      return res.json(permissions);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

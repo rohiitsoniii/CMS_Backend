@@ -50,10 +50,10 @@ export class EmbeddingService {
     const vector = await this.generateEmbedding(textToEmbed);
     
     if (vector.length > 0) {
-       // Typically stored in a vectorDB or Atlas Vector Search. 
+       // Typically stored in a vectorDB or Atlas Vector Search.
        // For this implementation, we store it softly in the meta object to avoid schema crashes
-       content.meta = content.meta || {};
-       content.meta.embedding = vector;
+       content.meta = content.meta || ({} as any);
+       (content.meta as any).embedding = vector;
        // Skip validation to ensure we just save the vector blindly
        await content.save({ validateBeforeSave: false });
     }

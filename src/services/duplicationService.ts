@@ -1,5 +1,4 @@
 import { Content } from '../models/Content';
-import { MediaFile } from '../models/MediaFile';
 import mongoose from 'mongoose';
 
 export class DuplicationService {
@@ -133,7 +132,7 @@ export class DuplicationService {
     const newRelationships: any = {};
 
     for (const field of relationshipFields) {
-      const relatedIds = original.data[field];
+      const relatedIds = original.data[field] as unknown as any[];
       const duplicatedRelated = [];
 
       for (const relatedId of relatedIds) {

@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { Subscription } from '../models/Subscription';
+import { Subscription, type ISubscription } from '../models/Subscription';
 import { Plan } from '../models/Plan';
 import { Invoice } from '../models/Invoice';
 import { Tenant } from '../models/Tenant';
@@ -7,7 +7,7 @@ import { CouponService } from './CouponService.js';
 
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder_key_for_development', {
-  apiVersion: '2024-12-18.acacia'
+  apiVersion: '2026-03-25.dahlia'
 });
 
 export class BillingService {
@@ -24,6 +24,7 @@ export class BillingService {
 
   // Create subscription
   static async createSubscription(
+    tenantId: string,
     planId: string,
     billingCycle: 'monthly' | 'yearly',
     paymentMethodId?: string,
@@ -95,9 +96,9 @@ export class BillingService {
       customer: stripeCustomerId,
       items: [{ price: stripePriceId }],
       trial_period_days: 14, // 14-day free trial
-      coupon: stripeCouponId,
+      ...(stripeCouponId ? { discounts: [{ coupon: stripeCouponId }] } : {}),
       metadata: { tenantId, planId, couponCode: couponCode || '' }
-    });
+    } as any);
 
     // If coupon was used, increment internal usage
     if (couponCode) {
@@ -106,6 +107,7 @@ export class BillingService {
 
 
     // Create subscription record
+    const stripeSubAny = stripeSubscription as any;
     const subscription = await Subscription.create({
       tenantId,
       planId,
@@ -114,10 +116,10 @@ export class BillingService {
       stripePriceId,
       status: stripeSubscription.status,
       billingCycle,
-      currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-      trialEnd: stripeSubscription.trial_end 
-        ? new Date(stripeSubscription.trial_end * 1000) 
+      currentPeriodStart: new Date((stripeSubAny.current_period_start ?? Math.floor(Date.now() / 1000)) * 1000),
+      currentPeriodEnd: new Date((stripeSubAny.current_period_end ?? (Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60)) * 1000),
+      trialEnd: stripeSubAny.trial_end
+        ? new Date(stripeSubAny.trial_end * 1000)
         : undefined
     });
 
@@ -251,42 +253,43 @@ export class BillingService {
   }
 
   // Handle Stripe webhook
-  static async handleWebhook(event: Stripe.Event) {
-    switch (event.type) {
+  static async handleWebhook(event: any) {
+    switch ((event as any).type) {
       case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+        await this.handleSubscriptionUpdated((event as any).data.object as any);
         break;
-      
+
       case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        await this.handleSubscriptionDeleted((event as any).data.object as any);
         break;
-      
+
       case 'invoice.paid':
-        await this.handleInvoicePaid(event.data.object as Stripe.Invoice);
+        await this.handleInvoicePaid((event as any).data.object as any);
         break;
-      
+
       case 'invoice.payment_failed':
-        await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        await this.handleInvoicePaymentFailed((event as any).data.object as any);
         break;
     }
   }
 
-  private static async handleSubscriptionUpdated(stripeSubscription: Stripe.Subscription) {
+  private static async handleSubscriptionUpdated(stripeSubscription: any) {
     const subscription = await Subscription.findOne({
-      stripeSubscriptionId: stripeSubscription.id
+      stripeSubscriptionId: (stripeSubscription as any).id
     });
 
     if (subscription) {
-      subscription.status = stripeSubscription.status as any;
-      subscription.currentPeriodStart = new Date(stripeSubscription.current_period_start * 1000);
-      subscription.currentPeriodEnd = new Date(stripeSubscription.current_period_end * 1000);
+      subscription.status = (stripeSubscription as any).status as any;
+      const subAny = stripeSubscription as any;
+      subscription.currentPeriodStart = new Date((subAny.current_period_start ?? Math.floor(Date.now() / 1000)) * 1000);
+      subscription.currentPeriodEnd = new Date((subAny.current_period_end ?? (Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60)) * 1000);
       await subscription.save();
     }
   }
 
-  private static async handleSubscriptionDeleted(stripeSubscription: Stripe.Subscription) {
+  private static async handleSubscriptionDeleted(stripeSubscription: any) {
     const subscription = await Subscription.findOne({
-      stripeSubscriptionId: stripeSubscription.id
+      stripeSubscriptionId: (stripeSubscription as any).id
     });
 
     if (subscription) {
@@ -296,35 +299,37 @@ export class BillingService {
     }
   }
 
-  private static async handleInvoicePaid(stripeInvoice: Stripe.Invoice) {
+  private static async handleInvoicePaid(stripeInvoice: any) {
+    const invAny = stripeInvoice as any;
     const subscription = await Subscription.findOne({
-      stripeCustomerId: stripeInvoice.customer as string
+      stripeCustomerId: invAny.customer as string
     });
 
     if (subscription) {
       await Invoice.create({
         tenantId: subscription.tenantId,
         subscriptionId: subscription._id,
-        stripeInvoiceId: stripeInvoice.id,
-        number: stripeInvoice.number || '',
-        amount: stripeInvoice.amount_paid / 100,
-        currency: stripeInvoice.currency,
+        stripeInvoiceId: invAny.id,
+        number: invAny.number || '',
+        amount: (invAny.amount_paid ?? 0) / 100,
+        currency: invAny.currency,
         status: 'paid',
-        paidAt: new Date(stripeInvoice.status_transitions.paid_at! * 1000),
-        invoiceUrl: stripeInvoice.hosted_invoice_url || undefined,
-        invoicePdf: stripeInvoice.invoice_pdf || undefined,
-        items: stripeInvoice.lines.data.map(line => ({
+        paidAt: new Date(((invAny.status_transitions?.paid_at ?? Math.floor(Date.now() / 1000))) * 1000),
+        invoiceUrl: invAny.hosted_invoice_url || undefined,
+        invoicePdf: invAny.invoice_pdf || undefined,
+        items: (invAny.lines?.data ?? []).map((line: any) => ({
           description: line.description || '',
-          amount: line.amount / 100,
+          amount: (line.amount ?? 0) / 100,
           quantity: line.quantity || 1
         }))
       });
     }
   }
 
-  private static async handleInvoicePaymentFailed(stripeInvoice: Stripe.Invoice) {
+  private static async handleInvoicePaymentFailed(stripeInvoice: any) {
+    const invAny = stripeInvoice as any;
     const subscription = await Subscription.findOne({
-      stripeCustomerId: stripeInvoice.customer as string
+      stripeCustomerId: invAny.customer as string
     });
 
     if (subscription) {
@@ -335,53 +340,19 @@ export class BillingService {
     }
   }
 
-  // Get subscription for tenant
-  static async getSubscription(tenantId: string) {
-    const subscription = await Subscription.findOne({ tenantId }).populate('planId');
-    if (subscription) return subscription;
-
-    // Fallback: check tenant subscription status or default free plan
-    const tenant = await Tenant.findById(tenantId);
-    const planSlug = tenant?.subscription?.plan || 'free';
-    const plan = (await Plan.findOne({ slug: planSlug })) || (await Plan.findOne({ slug: 'free' }));
-
-    return {
-      _id: 'sub_free_' + tenantId,
-      tenantId,
-      plan: plan || {
-        name: 'Free',
-        slug: 'free',
-        price: { monthly: 0, yearly: 0 },
-        limits: {
-          projects: 1,
-          contentItems: 1000,
-          teamMembers: 2,
-          storage: 10,
-          apiCallsPerMonth: 10000,
-          apiRateLimit: 100
-        },
-        features: ['1 project', '1,000 content items', 'Community support']
-      },
-      status: 'active',
-      billingCycle: 'monthly',
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      cancelAtPeriodEnd: false,
-      isFreeTier: true
-    };
-  }
-
   // Get usage for tenant
   static async getUsage(tenantId: string) {
     const subscription = await Subscription.findOne({ tenantId });
     if (subscription && subscription.usage) return subscription.usage;
 
     const tenant = await Tenant.findById(tenantId);
+    const tenantUsage = tenant?.usage as any;
     return {
       projects: { used: 1, limit: 1 },
-      contentItems: { used: tenant?.usage?.contentItems || 0, limit: 1000 },
+      contentItems: { used: tenantUsage?.contentItems || 0, limit: 1000 },
       teamMembers: { used: 1, limit: 2 },
-      storage: { used: tenant?.usage?.storageUsed || 0, limit: 10 },
-      apiCalls: { used: tenant?.usage?.apiCalls || 0, limit: 10000 }
+      storage: { used: tenantUsage?.storageUsed || 0, limit: 10 },
+      apiCalls: { used: tenantUsage?.apiCalls || 0, limit: 10000 }
     };
   }
 

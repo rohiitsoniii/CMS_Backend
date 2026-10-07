@@ -13,13 +13,14 @@ interface RateLimitConfig {
 const blockedIPs = new Set<string>();
 
 export const advancedRateLimit = (config: RateLimitConfig) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const key = config.keyGenerator ? config.keyGenerator(req) : req.ip || 'unknown';
       
       // Check if IP is blocked
       if (blockedIPs.has(req.ip || '')) {
-        return res.status(429).json({ error: 'IP blocked due to excessive requests' });
+        res.status(429).json({ error: 'IP blocked due to excessive requests' });
+        return;
       }
 
       const redisKey = `ratelimit:${key}`;
@@ -42,15 +43,18 @@ export const advancedRateLimit = (config: RateLimitConfig) => {
           setTimeout(() => blockedIPs.delete(req.ip || ''), 3600000); // Unblock after 1 hour
         }
         
-        return res.status(429).json({
+        res.status(429).json({
           error: 'Too many requests',
           retryAfter: ttl
         });
+        return;
       }
 
       next();
+      return;
     } catch (error) {
       next();
+      return;
     }
   };
 };

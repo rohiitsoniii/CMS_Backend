@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { IFieldDefinition, FieldType } from '../types/fieldTypes';
+import { IFieldDefinition } from '../types/fieldTypes';
 
 /**
  * ContentType Model
@@ -123,20 +123,20 @@ ContentTypeSchema.virtual('fieldCount').get(function() {
 });
 
 // Methods
-ContentTypeSchema.methods.getField = function(fieldName: string): IFieldDefinition | undefined {
-  return this.fields.find(f => f.name === fieldName);
+ContentTypeSchema.methods.getField = function(this: any, fieldName: string): IFieldDefinition | undefined {
+  return this.fields.find((f: IFieldDefinition) => f.name === fieldName);
 };
 
-ContentTypeSchema.methods.hasField = function(fieldName: string): boolean {
-  return this.fields.some(f => f.name === fieldName);
+ContentTypeSchema.methods.hasField = function(this: any, fieldName: string): boolean {
+  return this.fields.some((f: IFieldDefinition) => f.name === fieldName);
 };
 
-ContentTypeSchema.methods.getLocalizedFields = function(): IFieldDefinition[] {
-  return this.fields.filter(f => f.localized);
+ContentTypeSchema.methods.getLocalizedFields = function(this: any): IFieldDefinition[] {
+  return this.fields.filter((f: IFieldDefinition) => f.localized);
 };
 
-ContentTypeSchema.methods.getRequiredFields = function(): IFieldDefinition[] {
-  return this.fields.filter(f => f.required);
+ContentTypeSchema.methods.getRequiredFields = function(this: any): IFieldDefinition[] {
+  return this.fields.filter((f: IFieldDefinition) => f.required);
 };
 
 ContentTypeSchema.methods.validateFieldData = function(fieldName: string, value: any): { valid: boolean; errors: string[] } {

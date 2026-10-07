@@ -16,11 +16,15 @@ import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import routes from './routes/index.js';
 import swaggerRouter from './config/swagger.js';
-import { errorHandler, notFoundHandler, usageLogger, requestIdMiddleware } from './middleware/index.js';
+import { errorHandler, notFoundHandler, usageLogger, requestIdMiddleware, sentryMiddleware, sentryErrorMiddleware } from './middleware/index.js';
+import cookieParser from 'cookie-parser';
+import { csrfProtection } from './middleware/cookies.js';
+import { httpMetrics } from './middleware/httpMetrics.js';
 import { typeDefs } from './graphql/schema.js';
 import { resolvers } from './graphql/resolvers.js';
 import collaborationService from './services/collaborationService.js';
 import { scheduledPublishWorker } from './workers/scheduledPublishWorker.js';
+import { webhookRetryWorker } from './workers/webhookRetryWorker.js';
 import { checkAPIRateLimit } from './middleware/quotaMiddleware.js';
 
 // Initialize Express app
@@ -34,6 +38,24 @@ const startServer = async () => {
 
     // Connect to MongoDB
     await connectDatabase();
+
+    // Run pending DB migrations before serving traffic. Fail-closed in
+    // production (a half-migrated schema must never serve); warn-and-
+    // continue elsewhere. Set MIGRATE_ON_BOOT=false to skip explicitly.
+    if (process.env.MIGRATE_ON_BOOT !== 'false') {
+      try {
+        const { runMigrations } = await import('./migrations/runner.js');
+        const result = await runMigrations('up');
+        if ('applied' in result && result.applied.length > 0) {
+          console.log(`✅ Applied ${result.applied.length} DB migration(s): ${result.applied.join(', ')}`);
+        }
+      } catch (migrationError) {
+        console.error('❌ DB migrations failed:', (migrationError as Error).message);
+        if (config.nodeEnv === 'production') {
+          process.exit(1);
+        }
+      }
+    }
     
     // Connect to Redis (optional)
     try {
@@ -46,6 +68,14 @@ const startServer = async () => {
     
     // Request ID Generation
     app.use(requestIdMiddleware);
+
+    // Cookies (httpOnly session cookies) + double-submit CSRF protection
+    app.use(cookieParser());
+    app.use(csrfProtection);
+
+    // Error monitoring (no-op unless SENTRY_DSN is set) + HTTP metrics
+    app.use(sentryMiddleware);
+    app.use(httpMetrics);
 
     // Trust proxy
     app.set('trust proxy', 1);
@@ -68,34 +98,40 @@ const startServer = async () => {
       }
     }));
 
-    // Basic CSRF Protection via strict CORS and origin checking
-    // Note: Fully fledged CSRF tokens require cookie-session configuration
-    app.use((req, res, next) => {
-      // Prevent Cross-Site Request Forgery (CSRF) for mutating state via Origins
-      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-         const origin = req.headers.origin;
-         // Assume origin is checked during CORS, this block guarantees it hasn't somehow bypassed if it's external
-      }
-      next();
-    });
+    // Legacy no-op CSRF placeholder — real protection is double-submit
+    // tokens via csrfProtection (src/middleware/cookies.ts), mounted below.
 
-    // CORS
-    app.use(cors({
-      origin: (origin, callback) => {
+    // CORS — single shared policy (REST and GraphQL alike). Production
+    // allows the configured frontend plus ALLOWED_ORIGINS entries.
+    const corsOptions = {
+      origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
         if (!origin) return callback(null, true);
         if (config.nodeEnv === 'development') return callback(null, true);
-        const allowedOrigins = [config.frontendUrl];
+        const allowedOrigins = [
+          config.frontendUrl,
+          ...(process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+        ];
         if (allowedOrigins.includes(origin)) return callback(null, true);
         callback(new Error('Not allowed by CORS'));
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-API-Secret'],
-    }));
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-API-Secret', 'X-CSRF-Token', 'X-Bot-Key'],
+    };
+    app.use(cors(corsOptions));
 
-    // Body Parser
-    app.use(express.json({ limit: '10mb' }));
-    app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+    // Body Parser — Stripe webhook needs the RAW body for signature
+    // verification, so it is exempted here and parsed via express.raw()
+    // in billingRoutes instead (a consumed stream cannot be re-read).
+    const stripeWebhookPath = '/api/v1/billing/webhook';
+    app.use((req, res, next) => {
+      if (req.originalUrl === stripeWebhookPath) return next();
+      express.json({ limit: '10mb' })(req, res, next);
+    });
+    app.use((req, res, next) => {
+      if (req.originalUrl === stripeWebhookPath) return next();
+      express.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
+    });
 
     // Static Files
     app.use(express.static('public'));
@@ -105,7 +141,9 @@ const startServer = async () => {
     if (config.nodeEnv === 'development') app.use(morgan('dev'));
     else app.use(morgan('combined'));
 
-    // Rate Limiting
+    // Rate Limiting — applies in every env (dev uses generous config
+    // values, not a bypass). No path exemptions: delivery has its own
+    // per-key limiters, dashboard routes need the global one.
     const globalLimiter = rateLimit({
       windowMs: config.rateLimit.windowMs,
       max: config.rateLimit.maxRequests,
@@ -117,8 +155,11 @@ const startServer = async () => {
       standardHeaders: true,
       legacyHeaders: false,
       skip: (req) => {
-        if (config.nodeEnv === 'development') return true;
-        return req.path.startsWith('/api/v1/content') && !req.path.includes('/admin/');
+        // Liveness probes must never 429 (orchestrators kill the pod)
+        if (['/live', '/health', '/ready', '/metrics'].includes(req.path)) return true;
+        // Stripe webhooks: signature-verified, retried by Stripe on 429
+        if (req.path === '/api/v1/billing/webhook') return true;
+        return false;
       },
     });
     app.use(globalLimiter);
@@ -139,7 +180,7 @@ const startServer = async () => {
 
     app.use(
       '/graphql',
-      cors<cors.CorsRequest>(),
+      cors(corsOptions),
       express.json(),
       expressMiddleware(server, {
         context: async ({ req }) => {
@@ -149,9 +190,14 @@ const startServer = async () => {
           }
           try {
             const decoded = jwt.verify(token.split(' ')[1], config.jwt.secret) as any;
+            // Enforce access-token type like REST (refresh tokens rejected)
+            if (decoded.type && decoded.type !== 'access') {
+              return {};
+            }
             return {
               user: { id: decoded.userId, role: decoded.role },
               tenantId: decoded.tenantId,
+              mfaVerified: decoded.mfaVerified,
             };
           } catch (e) {
             return {};
@@ -166,6 +212,11 @@ const startServer = async () => {
     // --- API Documentation ---
     app.use('/api-docs', swaggerRouter);
 
+    // Root-level liveness probes for Docker/Kubernetes container health checks
+    app.get(['/live', '/health', '/ready'], (_req, res) => {
+      res.status(200).json({ status: 'ok', success: true, timestamp: new Date().toISOString() });
+    });
+
     // Root endpoint
     app.get('/', (_req, res) => {
       res.json({
@@ -179,7 +230,8 @@ const startServer = async () => {
     });
 
     // --- Error Handling ---
-    // These must be last
+    // Sentry first (captures with request context), then 404 + custom handler
+    app.use(sentryErrorMiddleware);
     app.use(notFoundHandler);
     app.use(errorHandler);
 
@@ -204,6 +256,7 @@ const startServer = async () => {
 
     // Boot background workers
     scheduledPublishWorker.start();
+    webhookRetryWorker.start();
 
     // Graceful Shutdown Logic
     const shutdown = async (signal: string) => {

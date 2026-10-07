@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Schedule from '../models/Schedule';
 import { Content } from '../models/Content';
 
@@ -38,7 +39,7 @@ export const getSchedules = async (req: Request, res: Response) => {
 
     const total = await Schedule.countDocuments(query);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         schedules,
@@ -49,7 +50,7 @@ export const getSchedules = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching schedules:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch schedules',
       error: error.message
@@ -74,9 +75,9 @@ export const getUpcomingSchedules = async (req: Request, res: Response) => {
       });
     }
 
-    const schedules = await Schedule.findUpcoming(tenantId, Number(limit));
+    const schedules = await (Schedule as any).findUpcoming(tenantId, Number(limit));
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         schedules,
@@ -85,7 +86,7 @@ export const getUpcomingSchedules = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching upcoming schedules:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch upcoming schedules',
       error: error.message
@@ -104,7 +105,7 @@ export const getScheduleHistory = async (req: Request, res: Response) => {
     const query: any = {};
     if (projectId) query.projectId = projectId;
     const schedules = await Schedule.find(query).sort({ updatedAt: -1 }).limit(Number(limit));
-    res.json({
+    return res.json({
       success: true,
       data: {
         history: schedules,
@@ -113,7 +114,7 @@ export const getScheduleHistory = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    res.json({
+    return res.json({
       success: true,
       data: { history: [], schedules: [], total: 0 }
     });
@@ -155,13 +156,13 @@ export const getSchedule = async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: { schedule }
     });
   } catch (error: any) {
     console.error('Error fetching schedule:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch schedule',
       error: error.message
@@ -233,14 +234,14 @@ export const createSchedule = async (req: Request, res: Response) => {
 
     await schedule.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Schedule created successfully',
       data: { schedule }
     });
   } catch (error: any) {
     console.error('Error creating schedule:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to create schedule',
       error: error.message
@@ -295,14 +296,14 @@ export const updateSchedule = async (req: Request, res: Response) => {
     schedule.updatedBy = userId;
     await schedule.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Schedule updated successfully',
       data: { schedule }
     });
   } catch (error: any) {
     console.error('Error updating schedule:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to update schedule',
       error: error.message
@@ -338,13 +339,13 @@ export const deleteSchedule = async (req: Request, res: Response) => {
 
     await schedule.deleteOne();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Schedule deleted successfully'
     });
   } catch (error: any) {
     console.error('Error deleting schedule:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to delete schedule',
       error: error.message
@@ -379,25 +380,25 @@ export const cancelSchedule = async (req: Request, res: Response) => {
       });
     }
 
-    if (!schedule.isPending()) {
+    if (!(schedule as any).isPending()) {
       return res.status(400).json({
         success: false,
         message: 'Only pending schedules can be cancelled'
       });
     }
 
-    schedule.cancel();
+    (schedule as any).cancel();
     schedule.updatedBy = userId;
     await schedule.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Schedule cancelled successfully',
       data: { schedule }
     });
   } catch (error: any) {
     console.error('Error cancelling schedule:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to cancel schedule',
       error: error.message
@@ -432,7 +433,7 @@ export const executeSchedule = async (req: Request, res: Response) => {
       });
     }
 
-    if (!schedule.isPending()) {
+    if (!(schedule as any).isPending()) {
       return res.status(400).json({
         success: false,
         message: 'Only pending schedules can be executed'
@@ -442,7 +443,7 @@ export const executeSchedule = async (req: Request, res: Response) => {
     // Get content
     const content = await Content.findById(schedule.contentId);
     if (!content) {
-      schedule.markAsFailed('Content not found');
+      (schedule as any).markAsFailed('Content not found');
       await schedule.save();
       return res.status(404).json({
         success: false,
@@ -451,7 +452,7 @@ export const executeSchedule = async (req: Request, res: Response) => {
     }
 
     // Mark as processing
-    schedule.markAsProcessing();
+    (schedule as any).markAsProcessing();
     await schedule.save();
 
     try {
@@ -470,20 +471,20 @@ export const executeSchedule = async (req: Request, res: Response) => {
       }
 
       // Mark as completed
-      schedule.markAsCompleted();
+      (schedule as any).markAsCompleted();
       await schedule.save();
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Schedule executed successfully',
         data: { schedule }
       });
     } catch (execError: any) {
       // Mark as failed
-      schedule.markAsFailed(execError.message);
+      (schedule as any).markAsFailed(execError.message);
       await schedule.save();
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: 'Failed to execute schedule',
         error: execError.message
@@ -491,7 +492,7 @@ export const executeSchedule = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error('Error executing schedule:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to execute schedule',
       error: error.message
@@ -516,9 +517,9 @@ export const getContentSchedules = async (req: Request, res: Response) => {
       });
     }
 
-    const schedules = await Schedule.findByContent(id);
+    const schedules = await (Schedule as any).findByContent(id);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         schedules,
@@ -527,7 +528,7 @@ export const getContentSchedules = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching content schedules:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch content schedules',
       error: error.message

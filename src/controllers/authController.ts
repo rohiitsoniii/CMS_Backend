@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { Tenant, User, APIKey } from '../models/index.js';
 import { generateTokens, refreshTokens, asyncHandler, AppError } from '../middleware/index.js';
+import { setAuthCookies, clearAuthCookies } from '../middleware/cookies.js';
+import { runInTransaction } from '../utils/transactions.js';
 import { subscriptionPlans } from '../config/index.js';
 
 /**
@@ -27,36 +31,51 @@ export const register = asyncHandler(async (req: Request, res: Response): Promis
     counter++;
   }
   
-  // Create tenant
-  const tenant = await Tenant.create({
-    name,
-    slug,
-    email: email.toLowerCase(),
-    password,
-    company,
-    website,
-    subscription: {
-      plan: 'free',
-      startDate: new Date(),
-      isActive: true,
-      billingCycle: 'monthly',
-    },
-  });
-  
-  // Create owner user for the tenant
-  const user = await User.create({
-    tenantId: tenant._id,
-    email: email.toLowerCase(),
-    password,
-    firstName: name.split(' ')[0] || name,
-    lastName: name.split(' ').slice(1).join(' ') || '',
-    role: 'owner',
-    isEmailVerified: false,
+  // Create tenant + owner atomically (no orphan tenant on partial failure)
+  const { tenant, user } = await runInTransaction(async (session) => {
+    const opts = session ? { session } : {};
+    const newTenant = await Tenant.create(
+      [
+        {
+          name,
+          slug,
+          email: email.toLowerCase(),
+          password,
+          company,
+          website,
+          subscription: {
+            plan: 'free',
+            startDate: new Date(),
+            isActive: true,
+            billingCycle: 'monthly',
+          },
+        },
+      ],
+      opts
+    ).then((docs) => docs[0]);
+
+    const newUser = await User.create(
+      [
+        {
+          tenantId: newTenant._id,
+          email: email.toLowerCase(),
+          password,
+          firstName: name.split(' ')[0] || name,
+          lastName: name.split(' ').slice(1).join(' ') || '',
+          role: 'owner',
+          isEmailVerified: false,
+        },
+      ],
+      opts
+    ).then((docs) => docs[0]);
+
+    return { tenant: newTenant, user: newUser };
   });
   
   // Generate tokens
-  const tokens = generateTokens(user._id.toString(), tenant._id.toString(), user.role);
-  
+  const tokens = generateTokens(user._id.toString(), tenant._id.toString(), user.role, false, user.tokenVersion || 0);
+  setAuthCookies(res, tokens);
+
   res.status(201).json({
     success: true,
     message: 'Registration successful',
@@ -112,7 +131,8 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
   }
   
   // Generate tokens (mfaVerified is false initially)
-  const tokens = generateTokens(user._id.toString(), tenant._id.toString(), user.role, false);
+  const tokens = generateTokens(user._id.toString(), tenant._id.toString(), user.role, false, user.tokenVersion || 0);
+  setAuthCookies(res, tokens);
   
   if (user.twoFactorEnabled) {
     res.json({
@@ -153,27 +173,151 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
 });
 
 /**
- * Refresh tokens
+ * Refresh tokens — accepts the refresh token from the httpOnly cookie
+ * (browsers) or the request body (native clients).
  * POST /api/v1/auth/refresh
  */
 export const refresh = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { refreshToken } = req.body;
-  
+  const refreshToken = (req.cookies?.refreshToken as string | undefined) || req.body?.refreshToken;
+
   if (!refreshToken) {
     throw new AppError('Refresh token required', 400);
   }
-  
+
   const tokens = await refreshTokens(refreshToken);
-  
+
   if (!tokens) {
     throw new AppError('Invalid or expired refresh token', 401);
   }
-  
+
+  setAuthCookies(res, tokens);
+
   res.json({
     success: true,
     data: { tokens },
   });
 });
+
+/**
+ * Logout — revokes all sessions by bumping tokenVersion and clears cookies.
+ * POST /api/v1/auth/logout
+ */
+export const logout = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  if (req.userId) {
+    await User.findByIdAndUpdate(req.userId, { $inc: { tokenVersion: 1 } }).exec();
+  }
+  clearAuthCookies(res);
+  res.json({
+    success: true,
+    message: 'Logged out successfully',
+  });
+});
+
+/**
+ * Forgot password (admin/dashboard users)
+ * POST /api/v1/auth/forgot-password
+ * Always returns generic success to avoid user enumeration.
+ */
+export const forgotPassword = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body;
+
+  const genericResponse = {
+    success: true,
+    message: 'If the email exists, a password reset link has been sent',
+  };
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+
+  if (!user || !user.isActive) {
+    res.json(genericResponse);
+    return;
+  }
+
+  // Generate single-use reset token (store only the hash)
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  user.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+  user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  await user.save({ validateBeforeSave: false });
+
+  await sendPasswordResetEmail(user.email, resetToken, user.firstName);
+
+  res.json(genericResponse);
+});
+
+/**
+ * Reset password (admin/dashboard users)
+ * POST /api/v1/auth/reset-password
+ */
+export const resetPassword = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    throw new AppError('Reset token and new password are required', 400, 'VALIDATION_ERROR');
+  }
+
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+  const user = await User.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetExpires: { $gt: new Date() },
+  }).select('+password');
+
+  if (!user || !user.isActive) {
+    throw new AppError('Invalid or expired reset token', 400, 'INVALID_TOKEN');
+  }
+
+  user.password = password; // pre-save hook hashes it
+  user.passwordResetToken = undefined;
+  user.passwordResetExpires = undefined;
+  // Invalidate all existing sessions (stolen session dies with the reset)
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  await user.save();
+
+  res.json({
+    success: true,
+    message: 'Password reset successfully',
+  });
+});
+
+/**
+ * Send the password reset email. Falls back to console logging when
+ * SMTP is not configured so self-hosted dev setups never crash.
+ */
+const sendPasswordResetEmail = async (to: string, token: string, firstName: string): Promise<void> => {
+  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/reset-password?token=${token}`;
+
+  if (!process.env.SMTP_USER) {
+    // Never log the email/token — the link is single-use credentials
+    console.log('[auth] SMTP not configured — password reset link generated (see user inbox when SMTP is set)');
+    return;
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@example.com',
+      to,
+      subject: 'Reset your password',
+      html: `
+        <h2>Password reset</h2>
+        <p>Hi ${firstName || 'there'},</p>
+        <p>Click the link below to reset your password. It expires in 1 hour.</p>
+        <a href="${resetUrl}">Reset password</a>
+        <p>If you didn't request this, you can safely ignore this email.</p>
+      `,
+    });
+  } catch (error) {
+    console.error('Failed to send password reset email:', error);
+  }
+};
 
 /**
  * Get current user profile
@@ -255,7 +399,19 @@ export const changePassword = asyncHandler(async (req: Request, res: Response): 
   // Update password
   user.password = newPassword;
   await user.save();
-  
+
+  // Invalidate all other sessions; re-issue cookies for this one
+  await User.findByIdAndUpdate(user._id, { $inc: { tokenVersion: 1 } }).exec();
+  const fresh = await User.findById(user._id);
+  const tokens = generateTokens(
+    user._id.toString(),
+    (fresh?.tenantId || user.tenantId).toString(),
+    user.role,
+    false,
+    fresh?.tokenVersion || 0
+  );
+  setAuthCookies(res, tokens);
+
   res.json({
     success: true,
     message: 'Password changed successfully',
@@ -281,6 +437,7 @@ export const createAPIKey = asyncHandler(async (req: Request, res: Response): Pr
     apiKeyHash: keyPair.apiKeyHash,
     secretKey: keyPair.secretKey,
     secretKeyHash: keyPair.secretKeyHash,
+    keyPrefix: keyPair.apiKey.slice(0, 12),
     permissions: permissions || ['content:read'],
     allowedOrigins: allowedOrigins || [],
     expiresAt: expiresAt ? new Date(expiresAt) : undefined,
@@ -312,7 +469,7 @@ export const getAPIKeys = asyncHandler(async (req: Request, res: Response): Prom
   const apiKeys = await APIKey.find({ 
     tenantId: req.tenantId,
     isActive: true,
-  }).select('-apiKeyHash -secretKeyHash');
+  }).select('-apiKey -secretKey -apiKeyHash -secretKeyHash');
   
   res.json({
     success: true,

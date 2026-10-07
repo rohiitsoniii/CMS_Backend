@@ -17,9 +17,9 @@ export const trashController = {
         metadata
       );
 
-      res.json(trashItem);
+      return res.json(trashItem);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -30,9 +30,9 @@ export const trashController = {
       const filters = req.query;
 
       const items = await TrashService.getTrashItems(projectId, filters);
-      res.json(items);
+      return res.json(items);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -41,9 +41,9 @@ export const trashController = {
     try {
       const { trashId } = req.params;
       const restored = await TrashService.restoreFromTrash(trashId);
-      res.json(restored);
+      return res.json(restored);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -52,9 +52,9 @@ export const trashController = {
     try {
       const { trashId } = req.params;
       await TrashService.permanentDelete(trashId);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -63,9 +63,9 @@ export const trashController = {
     try {
       const { trashIds } = req.body;
       const results = await TrashService.bulkRestore(trashIds);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -74,9 +74,9 @@ export const trashController = {
     try {
       const { projectId } = req.params;
       await TrashService.emptyTrash(projectId);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

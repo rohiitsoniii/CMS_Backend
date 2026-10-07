@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { config } from '../config/index.js';
-import { APIKey, Tenant, type ITenant, type IAPIKey } from '../models/index.js';
+import { APIKey, Tenant } from '../models/index.js';
+import type { IAPIKey } from '../models/APIKey.js';
 import { getRedisClient } from '../config/redis.js';
 
 // Extend Express Request type for API key auth
@@ -14,6 +15,50 @@ declare global {
 }
 
 /**
+ * HMAC-SHA256 lookup hash for a presented API key. Keys are NEVER queried
+ * or stored in plaintext — only this hash touches the database.
+ */
+export const hashPresentedKey = (presentedKey: string): string =>
+  crypto.createHmac('sha256', config.apiKeySecret).update(presentedKey).digest('hex');
+
+const timingSafeEqualHex = (a: string, b: string): boolean => {
+  const aBuf = Buffer.from(a, 'hex');
+  const bBuf = Buffer.from(b, 'hex');
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+};
+
+/**
+ * Origin allow-list check. Exact hostname match or subdomain of an allowed
+ * entry (parsed as URL when possible). '*' preserves the legacy wildcard.
+ */
+export const isOriginAllowed = (origin: string | undefined, allowedOrigins: string[]): boolean => {
+  if (!allowedOrigins || allowedOrigins.length === 0) return true;
+  if (!origin) return true; // non-browser clients send no Origin/Referer
+  if (allowedOrigins.includes('*')) return true;
+
+  const hostOf = (value: string): string => {
+    try {
+      return new URL(value).hostname.toLowerCase();
+    } catch {
+      return value.toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
+    }
+  };
+
+  let originHost: string;
+  try {
+    originHost = new URL(origin).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  return allowedOrigins.some((allowed) => {
+    const allowedHost = hostOf(allowed);
+    return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+  });
+};
+
+/**
  * Middleware to authenticate public API requests via API Key
  */
 export const authenticateAPIKey = async (
@@ -22,25 +67,55 @@ export const authenticateAPIKey = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const apiKeyHeader = req.headers['x-api-key'] as string;
+    let apiKeyHeader = req.headers['x-api-key'] as string;
     const secretKeyHeader = req.headers['x-api-secret'] as string;
+    
+    // Support standard Bearer token header if X-API-Key header is absent
+    if (!apiKeyHeader && req.headers.authorization?.startsWith('Bearer ')) {
+      apiKeyHeader = req.headers.authorization.split(' ')[1];
+    }
     
     if (!apiKeyHeader) {
       res.status(401).json({
         success: false,
         error: 'API key required',
-        message: 'Please provide X-API-Key header',
+        message: 'Please provide X-API-Key header or Bearer token',
       });
       return;
     }
     
-    // Find API key in database
-    const apiKeyDoc = await APIKey.findOne({ 
-      apiKey: apiKeyHeader,
+    // Find API key by hash — plaintext never touches a query
+    const presentedHash = hashPresentedKey(apiKeyHeader);
+    let apiKeyDoc = await APIKey.findOne({
+      apiKeyHash: presentedHash,
       isActive: true,
     }).select('+apiKeyHash +secretKeyHash');
-    
+
+    // Legacy fallback: rows created before hashes were backfilled.
+    // On match, backfill the hash so the next request takes the fast path.
     if (!apiKeyDoc) {
+      const legacy = await APIKey.findOne({
+        apiKey: apiKeyHeader,
+        isActive: true,
+      }).select('+apiKey +secretKey +apiKeyHash +secretKeyHash');
+      if (legacy) {
+        const backfill: Record<string, string> = { apiKeyHash: hashPresentedKey(apiKeyHeader) };
+        if (legacy.secretKey) {
+          backfill.secretKeyHash = crypto
+            .createHmac('sha256', config.apiKeySecret)
+            .update(legacy.secretKey)
+            .digest('hex');
+        }
+        await APIKey.updateOne({ _id: legacy._id }, { $set: backfill }).exec();
+        console.warn(`[apiKeyAuth] backfilled hash for legacy key ${String(legacy._id)}`);
+        apiKeyDoc = await APIKey.findOne({
+          apiKeyHash: presentedHash,
+          isActive: true,
+        }).select('+apiKeyHash +secretKeyHash');
+      }
+    }
+
+    if (!apiKeyDoc || !timingSafeEqualHex(presentedHash, apiKeyDoc.apiKeyHash)) {
       res.status(401).json({
         success: false,
         error: 'Invalid API key',
@@ -63,8 +138,8 @@ export const authenticateAPIKey = async (
         .createHmac('sha256', config.apiKeySecret)
         .update(secretKeyHeader)
         .digest('hex');
-      
-      if (secretKeyHash !== apiKeyDoc.secretKeyHash) {
+
+      if (!timingSafeEqualHex(secretKeyHash, apiKeyDoc.secretKeyHash)) {
         res.status(401).json({
           success: false,
           error: 'Invalid API secret',
@@ -72,22 +147,15 @@ export const authenticateAPIKey = async (
         return;
       }
     }
-    
+
     // Check origin if allowedOrigins is set
     const origin = req.headers.origin || req.headers.referer;
-    if (apiKeyDoc.allowedOrigins.length > 0 && origin) {
-      const isAllowed = apiKeyDoc.allowedOrigins.some(allowed => {
-        if (allowed === '*') return true;
-        return origin.includes(allowed);
+    if (!isOriginAllowed(origin, apiKeyDoc.allowedOrigins || [])) {
+      res.status(403).json({
+        success: false,
+        error: 'Origin not allowed',
       });
-      
-      if (!isAllowed) {
-        res.status(403).json({
-          success: false,
-          error: 'Origin not allowed',
-        });
-        return;
-      }
+      return;
     }
     
     // Get tenant

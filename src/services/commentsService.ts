@@ -31,7 +31,7 @@ export class CommentsService {
     for (const userId of mentionedUserIds) {
       await EmailNotificationService.sendCommentMention(
         userId.toString(),
-        author?.name || 'Someone',
+        (author as any)?.fullName || (author as any)?.firstName || 'Someone',
         data.contentId,
         data.content
       );
@@ -165,7 +165,7 @@ export class CommentsService {
   }
 
   // Resolve usernames to user IDs
-  private static async resolveMentions(usernames: string[], projectId: string): Promise<string[]> {
+  private static async resolveMentions(usernames: string[], _projectId: string): Promise<string[]> {
     if (usernames.length === 0) return [];
 
     const users = await User.find({

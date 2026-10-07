@@ -19,7 +19,8 @@ export interface IWorkflowStep {
 
 export interface IWorkflow extends Document {
   tenantId: mongoose.Types.ObjectId;
-  
+  projectId?: mongoose.Types.ObjectId;
+
   // Workflow details
   name: string;
   description?: string;
@@ -152,61 +153,61 @@ WorkflowSchema.index({ tenantId: 1, isDefault: 1 });
 WorkflowSchema.index({ tenantId: 1, contentTypes: 1 });
 
 // Methods
-WorkflowSchema.methods.getStep = function(stepId: string): IWorkflowStep | undefined {
-  return this.steps.find(s => s.id === stepId);
+WorkflowSchema.methods.getStep = function(this: any, stepId: string): IWorkflowStep | undefined {
+  return this.steps.find((s: IWorkflowStep) => s.id === stepId);
 };
 
-WorkflowSchema.methods.getNextStep = function(currentStepId: string): IWorkflowStep | undefined {
+WorkflowSchema.methods.getNextStep = function(this: any, currentStepId: string): IWorkflowStep | undefined {
   const currentStep = this.getStep(currentStepId);
   if (!currentStep) return undefined;
-  
+
   const nextOrder = currentStep.order + 1;
-  return this.steps.find(s => s.order === nextOrder);
+  return this.steps.find((s: IWorkflowStep) => s.order === nextOrder);
 };
 
-WorkflowSchema.methods.getPreviousStep = function(currentStepId: string): IWorkflowStep | undefined {
+WorkflowSchema.methods.getPreviousStep = function(this: any, currentStepId: string): IWorkflowStep | undefined {
   const currentStep = this.getStep(currentStepId);
   if (!currentStep) return undefined;
-  
+
   const prevOrder = currentStep.order - 1;
-  return this.steps.find(s => s.order === prevOrder);
+  return this.steps.find((s: IWorkflowStep) => s.order === prevOrder);
 };
 
-WorkflowSchema.methods.getFirstStep = function(): IWorkflowStep | undefined {
-  return this.steps.find(s => s.order === 0) || this.steps[0];
+WorkflowSchema.methods.getFirstStep = function(this: any): IWorkflowStep | undefined {
+  return this.steps.find((s: IWorkflowStep) => s.order === 0) || this.steps[0];
 };
 
-WorkflowSchema.methods.getLastStep = function(): IWorkflowStep | undefined {
-  return this.steps.reduce((last, current) => 
+WorkflowSchema.methods.getLastStep = function(this: any): IWorkflowStep | undefined {
+  return this.steps.reduce((last: IWorkflowStep, current: IWorkflowStep) =>
     current.order > (last?.order || -1) ? current : last
   );
 };
 
-WorkflowSchema.methods.isStepAssignedTo = function(stepId: string, userId: mongoose.Types.ObjectId): boolean {
+WorkflowSchema.methods.isStepAssignedTo = function(this: any, stepId: string, userId: mongoose.Types.ObjectId): boolean {
   const step = this.getStep(stepId);
   if (!step) return false;
-  
+
   if (!step.assignedTo || step.assignedTo.length === 0) {
     return true; // No specific assignment means anyone can approve
   }
-  
-  return step.assignedTo.some(id => id.toString() === userId.toString());
+
+  return step.assignedTo.some((id: any) => id.toString() === userId.toString());
 };
 
 // Static methods
-WorkflowSchema.statics.findByTenant = function(tenantId: mongoose.Types.ObjectId) {
+WorkflowSchema.statics.findByTenant = function(this: any, tenantId: mongoose.Types.ObjectId) {
   return this.find({ tenantId, isActive: true });
 };
 
-WorkflowSchema.statics.findByApiId = function(tenantId: mongoose.Types.ObjectId, apiId: string) {
+WorkflowSchema.statics.findByApiId = function(this: any, tenantId: mongoose.Types.ObjectId, apiId: string) {
   return this.findOne({ tenantId, apiId });
 };
 
-WorkflowSchema.statics.findDefault = function(tenantId: mongoose.Types.ObjectId) {
+WorkflowSchema.statics.findDefault = function(this: any, tenantId: mongoose.Types.ObjectId) {
   return this.findOne({ tenantId, isDefault: true, isActive: true });
 };
 
-WorkflowSchema.statics.findForContentType = function(tenantId: mongoose.Types.ObjectId, contentTypeApiId: string) {
+WorkflowSchema.statics.findForContentType = function(this: any, tenantId: mongoose.Types.ObjectId, contentTypeApiId: string) {
   return this.find({
     tenantId,
     isActive: true,
@@ -214,22 +215,22 @@ WorkflowSchema.statics.findForContentType = function(tenantId: mongoose.Types.Ob
   });
 };
 
-WorkflowSchema.statics.apiIdExists = async function(tenantId: mongoose.Types.ObjectId, apiId: string) {
+WorkflowSchema.statics.apiIdExists = async function(this: any, tenantId: mongoose.Types.ObjectId, apiId: string) {
   const count = await this.countDocuments({ tenantId, apiId });
   return count > 0;
 };
 
 // Pre-save validation
-WorkflowSchema.pre('save', async function(next) {
+WorkflowSchema.pre('save', async function(this: any, next) {
   // Ensure steps have unique IDs
-  const stepIds = this.steps.map(s => s.id);
+  const stepIds = this.steps.map((s: IWorkflowStep) => s.id);
   const uniqueIds = new Set(stepIds);
   if (stepIds.length !== uniqueIds.size) {
     throw new Error('Step IDs must be unique');
   }
   
   // Ensure steps have sequential orders starting from 0
-  const orders = this.steps.map(s => s.order).sort((a, b) => a - b);
+  const orders = this.steps.map((s: IWorkflowStep) => s.order).sort((a: number, b: number) => a - b);
   for (let i = 0; i < orders.length; i++) {
     if (orders[i] !== i) {
       throw new Error('Step orders must be sequential starting from 0');

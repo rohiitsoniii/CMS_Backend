@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { RagBot, Project } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import crypto from 'crypto';
@@ -8,7 +8,7 @@ import crypto from 'crypto';
  * Manage AI chatbots for a project
  */
 
-export const listBots = asyncHandler(async (req: Request, res: Response) => {
+export const listBots = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId } = req.params;
   
   const bots = await RagBot.find({ 
@@ -22,7 +22,7 @@ export const listBots = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const getBot = asyncHandler(async (req: Request, res: Response) => {
+export const getBot = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   
   const bot = await RagBot.findOne({ 
@@ -41,7 +41,7 @@ export const getBot = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const createBot = asyncHandler(async (req: Request, res: Response) => {
+export const createBot = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId } = req.params;
   const botData = req.body;
   
@@ -72,7 +72,7 @@ export const createBot = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const updateBot = asyncHandler(async (req: Request, res: Response) => {
+export const updateBot = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   const updateData = req.body;
   
@@ -92,7 +92,7 @@ export const updateBot = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const deleteBot = asyncHandler(async (req: Request, res: Response) => {
+export const deleteBot = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   
   const bot = await RagBot.findOneAndDelete({ 
@@ -111,7 +111,7 @@ export const deleteBot = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const regenerateApiKey = asyncHandler(async (req: Request, res: Response) => {
+export const regenerateApiKey = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   
   const apiKey = `bot_${crypto.randomBytes(24).toString('hex')}`;
@@ -132,7 +132,7 @@ export const regenerateApiKey = asyncHandler(async (req: Request, res: Response)
   });
 });
 
-export const getBotAnalytics = asyncHandler(async (req: Request, res: Response) => {
+export const getBotAnalytics = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   
   const bot = await RagBot.findOne({ _id: botId, projectId, tenantId: req.tenantId });
@@ -152,7 +152,7 @@ export const getBotAnalytics = asyncHandler(async (req: Request, res: Response) 
   });
 });
 
-export const getEmbedCode = asyncHandler(async (req: Request, res: Response) => {
+export const getEmbedCode = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   
   const bot = await RagBot.findOne({ _id: botId, projectId, tenantId: req.tenantId });

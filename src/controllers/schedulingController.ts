@@ -4,23 +4,22 @@
  * Handles content scheduling endpoints
  */
 
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../middleware';
 import schedulingService from '../services/schedulingService';
-import { Content } from '../models/Content';
 
 /**
  * Schedule content publish
  */
-export const schedulePublish = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, id } = req.params;
+export const schedulePublish = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { id } = req.params;
   const { publishAt, recurring } = req.body;
 
   if (!publishAt) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'publishAt date is required',
-    });
+    }); return;
   }
 
   const content = await schedulingService.updateContentScheduling(id, {
@@ -38,15 +37,15 @@ export const schedulePublish = asyncHandler(async (req: Request, res: Response) 
 /**
  * Schedule content unpublish
  */
-export const scheduleUnpublish = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, id } = req.params;
+export const scheduleUnpublish = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { id } = req.params;
   const { unpublishAt } = req.body;
 
   if (!unpublishAt) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'unpublishAt date is required',
-    });
+    }); return;
   }
 
   const content = await schedulingService.updateContentScheduling(id, {
@@ -63,8 +62,8 @@ export const scheduleUnpublish = asyncHandler(async (req: Request, res: Response
 /**
  * Update content scheduling
  */
-export const updateScheduling = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, id } = req.params;
+export const updateScheduling = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { id } = req.params;
   const { publishAt, unpublishAt, recurring } = req.body;
 
   const content = await schedulingService.updateContentScheduling(id, {
@@ -83,8 +82,8 @@ export const updateScheduling = asyncHandler(async (req: Request, res: Response)
 /**
  * Clear content scheduling
  */
-export const clearScheduling = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, id } = req.params;
+export const clearScheduling = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { id } = req.params;
 
   const content = await schedulingService.clearContentScheduling(id);
 
@@ -98,8 +97,8 @@ export const clearScheduling = asyncHandler(async (req: Request, res: Response) 
 /**
  * Get content schedule
  */
-export const getContentSchedule = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, id } = req.params;
+export const getContentSchedule = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { id } = req.params;
 
   const schedule = schedulingService.getContentSchedule(id);
 
@@ -112,15 +111,14 @@ export const getContentSchedule = asyncHandler(async (req: Request, res: Respons
 /**
  * Get calendar view
  */
-export const getCalendarView = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+export const getCalendarView = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { startDate, endDate } = req.query;
 
   if (!startDate || !endDate) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'startDate and endDate are required',
-    });
+    }); return;
   }
 
   const calendar = await schedulingService.getCalendarView(
@@ -137,7 +135,7 @@ export const getCalendarView = asyncHandler(async (req: Request, res: Response) 
 /**
  * Get all scheduled tasks
  */
-export const getScheduledTasks = asyncHandler(async (req: Request, res: Response) => {
+export const getScheduledTasks = asyncHandler(async (_req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const tasks = schedulingService.getScheduledTasks();
 
   res.json({
@@ -149,22 +147,21 @@ export const getScheduledTasks = asyncHandler(async (req: Request, res: Response
 /**
  * Bulk schedule publish
  */
-export const bulkSchedulePublish = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+export const bulkSchedulePublish = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { contentIds, publishAt, recurring } = req.body;
 
   if (!contentIds || !Array.isArray(contentIds) || contentIds.length === 0) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'contentIds array is required',
-    });
+    }); return;
   }
 
   if (!publishAt) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'publishAt date is required',
-    });
+    }); return;
   }
 
   const results = await Promise.all(

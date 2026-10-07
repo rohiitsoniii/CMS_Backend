@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import Webhook from '../models/Webhook';
-import { AppError } from '../middleware/errorHandler';
+import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { webhookService } from '../services/webhookService';
 import { WebhookLogService } from '../services/webhookLogService.js';
 
-export const getWebhooks = async (req: Request, res: Response) => {
+export const getWebhooks = asyncHandler(async (req: Request, res: Response) => {
   const { projectId } = req.query;
   
   if (!projectId) {
@@ -17,9 +17,9 @@ export const getWebhooks = async (req: Request, res: Response) => {
     success: true,
     data: webhooks
   });
-};
+});
 
-export const getWebhook = async (req: Request, res: Response) => {
+export const getWebhook = asyncHandler(async (req: Request, res: Response) => {
   const webhook = await Webhook.findById(req.params.id);
   
   if (!webhook) {
@@ -30,13 +30,13 @@ export const getWebhook = async (req: Request, res: Response) => {
     success: true,
     data: webhook
   });
-};
+});
 
-export const createWebhook = async (req: Request, res: Response) => {
+export const createWebhook = asyncHandler(async (req: Request, res: Response) => {
   const { projectId, name, url, events, headers, secret } = req.body;
   
   const webhook = await Webhook.create({
-    tenantId: req.user!.tenantId,
+    tenantId: req.user!.tenantId.toString(),
     projectId,
     name,
     url,
@@ -49,9 +49,9 @@ export const createWebhook = async (req: Request, res: Response) => {
     success: true,
     data: webhook
   });
-};
+});
 
-export const updateWebhook = async (req: Request, res: Response) => {
+export const updateWebhook = asyncHandler(async (req: Request, res: Response) => {
   const webhook = await Webhook.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -66,18 +66,18 @@ export const updateWebhook = async (req: Request, res: Response) => {
     success: true,
     data: webhook
   });
-};
+});
 
-export const deleteWebhook = async (req: Request, res: Response) => {
+export const deleteWebhook = asyncHandler(async (req: Request, res: Response) => {
   await Webhook.findByIdAndDelete(req.params.id);
   
   res.json({
     success: true,
     message: 'Webhook deleted successfully'
   });
-};
+});
 
-export const testWebhook = async (req: Request, res: Response) => {
+export const testWebhook = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const webhook = await Webhook.findById(id);
   
@@ -96,10 +96,10 @@ export const testWebhook = async (req: Request, res: Response) => {
     success: true,
     message: 'Test webhook triggered'
   });
-};
+});
 
-export const getWebhookLogs = async (req: Request, res: Response) => {
-  const tenantId = req.user!.tenantId;
+export const getWebhookLogs = asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.user!.tenantId.toString();
   const { webhookId, event, status, startDate, endDate, limit = 20, offset = 0 } = req.query;
 
   const result = await WebhookLogService.getLogs(tenantId, {
@@ -121,10 +121,10 @@ export const getWebhookLogs = async (req: Request, res: Response) => {
       offset: Number(offset)
     }
   });
-};
+});
 
-export const getWebhookLog = async (req: Request, res: Response) => {
-  const tenantId = req.user!.tenantId;
+export const getWebhookLog = asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.user!.tenantId.toString();
   const { id } = req.params;
 
   const log = await WebhookLogService.getLogById(id, tenantId);
@@ -137,9 +137,9 @@ export const getWebhookLog = async (req: Request, res: Response) => {
     success: true,
     data: log
   });
-};
+});
 
-export const retryWebhookLog = async (req: Request, res: Response) => {
+export const retryWebhookLog = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
@@ -155,10 +155,10 @@ export const retryWebhookLog = async (req: Request, res: Response) => {
       error: error.message
     });
   }
-};
+});
 
-export const getWebhookStats = async (req: Request, res: Response) => {
-  const tenantId = req.user!.tenantId;
+export const getWebhookStats = asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.user!.tenantId.toString();
   const { webhookId, startDate, endDate } = req.query;
 
   const stats = await WebhookLogService.getStatistics(tenantId, {
@@ -171,4 +171,4 @@ export const getWebhookStats = async (req: Request, res: Response) => {
     success: true,
     data: stats
   });
-};
+});

@@ -149,7 +149,7 @@ export class BulkOperationsService {
   }
 
   // Bulk archive
-  static async bulkArchive(contentIds: string[], projectId: string, userId: string, reason?: string) {
+  static async bulkArchive(contentIds: string[], _projectId: string, _userId: string, _reason?: string) {
     const results = [];
     
     for (const id of contentIds) {

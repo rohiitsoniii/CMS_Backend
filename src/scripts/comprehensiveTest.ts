@@ -34,7 +34,7 @@ async function runComprehensiveTest() {
   let currentConsoleErrors: string[] = [];
   let currentFailedRequests: { url: string; status: number; statusText: string }[] = [];
 
-  page.on('pageerror', (err) => {
+  page.on('pageerror', (err: any) => {
     currentPageErrors.push(err.message);
   });
 

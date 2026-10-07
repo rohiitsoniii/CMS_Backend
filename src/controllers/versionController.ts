@@ -39,7 +39,7 @@ export const getVersionHistory = async (req: Request, res: Response) => {
       .sort((a, b) => b.version - a.version)
       .slice(Number(skip), Number(skip) + Number(limit));
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         contentId: content._id,
@@ -50,7 +50,7 @@ export const getVersionHistory = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching version history:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch version history',
       error: error.message
@@ -96,13 +96,13 @@ export const getVersion = async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: { version: versionData }
     });
   } catch (error: any) {
     console.error('Error fetching version:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch version',
       error: error.message
@@ -189,7 +189,7 @@ export const compareVersions = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error('Error comparing versions:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to compare versions',
       error: error.message
@@ -242,8 +242,8 @@ export const restoreVersion = async (req: Request, res: Response) => {
       data: content.data,
       localizedData: content.localizedData,
       status: content.status,
-      savedAt: new Date(),
-      savedBy: content.updatedBy,
+      changedAt: new Date(),
+      changedBy: content.updatedBy as any,
       changeNote: 'Auto-saved before restore'
     };
 
@@ -266,7 +266,7 @@ export const restoreVersion = async (req: Request, res: Response) => {
 
     await content.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: `Content restored to version ${version}`,
       data: {
@@ -277,7 +277,7 @@ export const restoreVersion = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error restoring version:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to restore version',
       error: error.message
@@ -352,7 +352,7 @@ export const getCurrentDiff = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error('Error getting current diff:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to get current diff',
       error: error.message
@@ -405,7 +405,7 @@ export const deleteVersion = async (req: Request, res: Response) => {
 
     await content.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: `Version ${version} deleted successfully`,
       data: {
@@ -414,7 +414,7 @@ export const deleteVersion = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error deleting version:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to delete version',
       error: error.message

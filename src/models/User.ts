@@ -21,6 +21,7 @@ export interface IUser extends Document {
   emailVerificationToken?: string;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  tokenVersion: number;
   lastLoginAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -100,6 +101,8 @@ const userSchema = new Schema<IUser>({
   emailVerificationToken: String,
   passwordResetToken: String,
   passwordResetExpires: Date,
+  // Bumped on logout/password change — invalidates all previously issued tokens
+  tokenVersion: { type: Number, default: 0 },
   lastLoginAt: Date,
 }, {
   timestamps: true,

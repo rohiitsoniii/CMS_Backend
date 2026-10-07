@@ -10,8 +10,27 @@
  * - Multi-language search
  */
 
-import { Client } from '@elastic/elasticsearch';
 import { Content } from '../models/Content';
+
+type ElasticClient = any;
+
+function createElasticClient(): ElasticClient | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Client } = require('@elastic/elasticsearch');
+    return new Client({
+      node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+      auth: process.env.ELASTICSEARCH_AUTH
+        ? {
+            username: process.env.ELASTICSEARCH_USERNAME || 'elastic',
+            password: process.env.ELASTICSEARCH_PASSWORD || '',
+          }
+        : undefined,
+    });
+  } catch {
+    return null;
+  }
+}
 
 interface SearchOptions {
   query: string;
@@ -53,7 +72,7 @@ interface SearchResult {
 }
 
 class SearchService {
-  private client: Client | null = null;
+  private client: ElasticClient | null = null;
   private indexName = 'content';
   private isInitialized = false;
 
@@ -64,15 +83,11 @@ class SearchService {
     if (this.isInitialized) return;
 
     try {
-      this.client = new Client({
-        node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
-        auth: process.env.ELASTICSEARCH_AUTH
-          ? {
-              username: process.env.ELASTICSEARCH_USERNAME || 'elastic',
-              password: process.env.ELASTICSEARCH_PASSWORD || '',
-            }
-          : undefined,
-      });
+      this.client = createElasticClient();
+      if (!this.client) {
+        console.log('⚠️  Search service will use MongoDB fallback (@elastic/elasticsearch not installed)');
+        return;
+      }
 
       // Test connection
       await this.client.ping();
@@ -199,8 +214,8 @@ class SearchService {
       });
 
       console.log(`🗑️  Removed from index: ${contentId}`);
-    } catch (error) {
-      if (error.meta?.statusCode !== 404) {
+    } catch (error: unknown) {
+      if ((error as any)?.meta?.statusCode !== 404) {
         console.error('Error removing content:', error);
       }
     }

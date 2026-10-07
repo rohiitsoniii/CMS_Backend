@@ -1,6 +1,5 @@
 import pino from 'pino';
 import { EventEmitter } from 'events';
-import { config } from '../config/index.js';
 
 // Event emitter for real-time log streaming (SSE)
 export const logStreamEmitter = new EventEmitter();

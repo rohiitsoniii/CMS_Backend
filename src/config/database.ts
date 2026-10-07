@@ -54,7 +54,7 @@ const autoSeedIfEmpty = async () => {
       createdBy: user._id,
     });
 
-    const workflow = await Workflow.create({
+    await Workflow.create({
       tenantId: tenant._id,
       projectId: project._id,
       name: 'Editorial Review',

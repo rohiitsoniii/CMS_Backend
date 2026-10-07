@@ -40,7 +40,7 @@ export const getJob = async (req: Request, res: Response) => {
             paused: 'paused',
         };
 
-        res.json({
+        return res.json({
             success: true,
             data: {
                 jobId: status.id,
@@ -53,7 +53,7 @@ export const getJob = async (req: Request, res: Response) => {
             },
         });
     } catch (error: any) {
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: 'Failed to get job status',
             error: error.message,

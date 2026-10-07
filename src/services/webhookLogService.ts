@@ -1,5 +1,5 @@
 import { WebhookLog } from '../models/WebhookLog.js';
-import { Webhook } from '../models/Webhook.js';
+import Webhook from '../models/Webhook.js';
 import mongoose from 'mongoose';
 
 export class WebhookLogService {

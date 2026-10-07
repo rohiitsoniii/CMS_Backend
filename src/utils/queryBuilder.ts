@@ -33,7 +33,18 @@ export interface QueryOptions {
 }
 
 /**
- * Build MongoDB query from filter parameters
+ * Fields that must never appear in a client-built query — blocks MongoDB
+ * operator injection ($where, $gt, ...) and prototype pollution.
+ */
+const FORBIDDEN_FIELD_PATTERN = /(^|\.)\$|^__proto__$|^constructor$|^prototype$|\.__proto__|constructor\.prototype/i;
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Build MongoDB query from filter parameters.
+ * Only allowlisted operator objects and primitive values are accepted —
+ * arbitrary nested objects (e.g. {"$gt": ""}) are dropped.
  */
 export const buildQuery = (filter: QueryFilter = {}): any => {
   const query: any = {};
@@ -43,15 +54,29 @@ export const buildQuery = (filter: QueryFilter = {}): any => {
       continue;
     }
 
-    // Handle nested fields (e.g., 'author.name')
-    const fieldPath = field;
+    if (typeof field !== 'string' || field.length > 128 || FORBIDDEN_FIELD_PATTERN.test(field)) {
+      continue;
+    }
 
     // Check if value is an operator object
     if (isOperatorObject(value)) {
-      query[fieldPath] = buildOperatorQuery(value);
+      const built = buildOperatorQuery(value);
+      if (built !== undefined && Object.keys(built).length > 0) {
+        query[field] = built;
+      }
+    } else if (isPlainObject(value)) {
+      // Non-operator objects are never passed through (NoSQL injection)
+      continue;
+    } else if (Array.isArray(value)) {
+      // Arrays must be primitive-only
+      if (value.every((v) => v === null || ['string', 'number', 'boolean'].includes(typeof v))) {
+        query[field] = value;
+      }
+    } else if (typeof value === 'string' && value.length > 1024) {
+      continue;
     } else {
-      // Direct value comparison
-      query[fieldPath] = value;
+      // Direct primitive comparison
+      query[field] = value;
     }
   }
 
@@ -73,65 +98,101 @@ const isOperatorObject = (value: any): boolean => {
 /**
  * Build MongoDB operator query
  */
+/**
+ * Build MongoDB operator query. All operand values are restricted to
+ * primitives (or primitive arrays) so operator objects cannot smuggle
+ * raw MongoDB operators like $where through operands.
+ */
+const asPrimitive = (value: unknown): string | number | boolean | null | undefined => {
+  if (value === null) return null;
+  if (typeof value === 'string') return value.slice(0, 1024);
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'boolean') return value;
+  return undefined;
+};
+
+const asPrimitiveArray = (value: unknown): Array<string | number | boolean | null> | undefined => {
+  if (!Array.isArray(value) || value.length > 100) return undefined;
+  const out: Array<string | number | boolean | null> = [];
+  for (const v of value) {
+    if (v === null) {
+      out.push(null);
+      continue;
+    }
+    if (typeof v === 'string' && v.length <= 1024) {
+      out.push(v);
+      continue;
+    }
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      out.push(v);
+      continue;
+    }
+    if (typeof v === 'boolean') {
+      out.push(v);
+      continue;
+    }
+    return undefined;
+  }
+  return out;
+};
+
 const buildOperatorQuery = (operators: FilterOperator): any => {
   const query: any = {};
 
   // Equality operators
   if (operators.eq !== undefined) {
-    return operators.eq;
+    const prim = asPrimitive(operators.eq);
+    if (prim === undefined) return {};
+    return prim;
   }
 
-  if (operators.ne !== undefined) {
-    query.$ne = operators.ne;
-  }
+  const setIfPrimitive = (key: string, value: unknown): void => {
+    const prim = asPrimitive(value);
+    if (prim !== undefined) query[key] = prim;
+  };
+
+  setIfPrimitive('$ne', operators.ne);
 
   // Comparison operators
-  if (operators.gt !== undefined) {
-    query.$gt = operators.gt;
-  }
-
-  if (operators.gte !== undefined) {
-    query.$gte = operators.gte;
-  }
-
-  if (operators.lt !== undefined) {
-    query.$lt = operators.lt;
-  }
-
-  if (operators.lte !== undefined) {
-    query.$lte = operators.lte;
-  }
+  setIfPrimitive('$gt', operators.gt);
+  setIfPrimitive('$gte', operators.gte);
+  setIfPrimitive('$lt', operators.lt);
+  setIfPrimitive('$lte', operators.lte);
 
   // Array operators
   if (operators.in !== undefined) {
-    query.$in = operators.in;
+    const arr = asPrimitiveArray(operators.in);
+    if (arr) query.$in = arr;
   }
 
   if (operators.nin !== undefined) {
-    query.$nin = operators.nin;
+    const arr = asPrimitiveArray(operators.nin);
+    if (arr) query.$nin = arr;
   }
 
   // String operators
-  if (operators.contains !== undefined) {
-    query.$regex = new RegExp(escapeRegex(operators.contains), 'i');
+  if (operators.contains !== undefined && typeof operators.contains === 'string') {
+    query.$regex = new RegExp(escapeRegex(operators.contains.slice(0, 200)), 'i');
   }
 
-  if (operators.startsWith !== undefined) {
-    query.$regex = new RegExp('^' + escapeRegex(operators.startsWith), 'i');
+  if (operators.startsWith !== undefined && typeof operators.startsWith === 'string') {
+    query.$regex = new RegExp('^' + escapeRegex(operators.startsWith.slice(0, 200)), 'i');
   }
 
-  if (operators.endsWith !== undefined) {
-    query.$regex = new RegExp(escapeRegex(operators.endsWith) + '$', 'i');
+  if (operators.endsWith !== undefined && typeof operators.endsWith === 'string') {
+    query.$regex = new RegExp(escapeRegex(operators.endsWith.slice(0, 200)) + '$', 'i');
   }
 
   // Existence operator
   if (operators.exists !== undefined) {
-    query.$exists = operators.exists;
+    query.$exists = operators.exists === true || (operators.exists as unknown) === 'true';
   }
 
-  // Regex operator
+  // Regex operator — escaped to a literal match (prevents ReDoS);
+  // use contains/startsWith/endsWith for substring semantics.
   if (operators.regex !== undefined) {
-    query.$regex = new RegExp(operators.regex);
+    const pattern = String(operators.regex).slice(0, 100);
+    query.$regex = new RegExp(escapeRegex(pattern), 'i');
   }
 
   return query;
@@ -145,7 +206,17 @@ const escapeRegex = (str: string): string => {
 };
 
 /**
- * Build sort object from orderBy parameter
+ * Sanitize a user-supplied search term for $regex use: coerces to string,
+ * caps length (ReDoS protection), escapes metacharacters.
+ */
+export const escapeSearchTerm = (term: unknown, maxLength = 200): string =>
+  escapeRegex(String(term ?? '').slice(0, maxLength));
+
+const SAFE_PATH_PATTERN = /^[A-Za-z0-9_.]+$/;
+
+/**
+ * Build sort object from orderBy parameter. Rejects $ operators and
+ * prototype-pollution paths.
  */
 export const buildSort = (orderBy?: string | string[]): any => {
   if (!orderBy) {
@@ -156,13 +227,10 @@ export const buildSort = (orderBy?: string | string[]): any => {
   const fields = Array.isArray(orderBy) ? orderBy : [orderBy];
 
   for (const field of fields) {
-    if (field.startsWith('-')) {
-      // Descending order
-      sort[field.substring(1)] = -1;
-    } else {
-      // Ascending order
-      sort[field] = 1;
-    }
+    if (typeof field !== 'string' || field.length > 64) continue;
+    const name = field.startsWith('-') ? field.substring(1) : field;
+    if (!SAFE_PATH_PATTERN.test(name) || name.includes('$')) continue;
+    sort[name] = field.startsWith('-') ? -1 : 1;
   }
 
   return sort;
@@ -186,14 +254,17 @@ export const buildPagination = (options: QueryOptions): { limit?: number; skip?:
 };
 
 /**
- * Build field selection
+ * Build field selection. Only safe dotted paths are allowed.
  */
 export const buildSelect = (select?: string[]): string | undefined => {
   if (!select || select.length === 0) {
     return undefined;
   }
 
-  return select.join(' ');
+  const safe = select.filter(
+    (f) => typeof f === 'string' && f.length <= 64 && SAFE_PATH_PATTERN.test(f.replace(/^-/, '')) && !f.includes('$')
+  );
+  return safe.length > 0 ? safe.join(' ') : undefined;
 };
 
 /**

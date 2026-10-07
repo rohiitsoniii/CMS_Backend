@@ -9,9 +9,9 @@ export const duplicationController = {
       const options = req.body;
 
       const duplicated = await DuplicationService.duplicateContent(contentId, options);
-      res.json(duplicated);
+      return res.json(duplicated);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -20,9 +20,9 @@ export const duplicationController = {
     try {
       const { contentIds, options } = req.body;
       const results = await DuplicationService.bulkDuplicate(contentIds, options);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -33,9 +33,9 @@ export const duplicationController = {
       const { templateName } = req.body;
 
       const template = await DuplicationService.createTemplate(contentId, templateName);
-      res.json(template);
+      return res.json(template);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -46,9 +46,9 @@ export const duplicationController = {
       const { targetProjectId } = req.body;
 
       const cloned = await DuplicationService.cloneToProject(contentId, targetProjectId);
-      res.json(cloned);
+      return res.json(cloned);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -57,9 +57,9 @@ export const duplicationController = {
     try {
       const { contentId } = req.params;
       const cloned = await DuplicationService.deepClone(contentId);
-      res.json(cloned);
+      return res.json(cloned);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

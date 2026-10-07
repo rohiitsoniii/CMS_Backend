@@ -67,9 +67,9 @@ export const importContent = asyncHandler(async (req: Request, res: Response): P
   const options = {
     projectId: new mongoose.Types.ObjectId(projectId),
     contentTypeId: new mongoose.Types.ObjectId(contentTypeId),
-    tenantId: req.tenantId,
-    userId: new mongoose.Types.ObjectId(req.userId),
-    overwrite,
+    tenantId: req.tenantId as any,
+    userId: new mongoose.Types.ObjectId(req.userId as string),
+    overwrite: overwrite as boolean,
   };
 
   let results;

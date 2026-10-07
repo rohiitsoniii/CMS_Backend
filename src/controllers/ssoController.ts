@@ -1,10 +1,8 @@
 import { Request, Response } from 'express';
 import { SSOService } from '../services/ssoService.js';
-import jwt from 'jsonwebtoken';
-import { config } from '../config/index.js';
 
 export class SSOController {
-  static getGoogleLoginUrl(req: Request, res: Response) {
+  static getGoogleLoginUrl(_req: Request, res: Response) {
     try {
       if (!SSOService.isGoogleSSOEnabled()) {
         return res.status(400).json({
@@ -14,12 +12,12 @@ export class SSOController {
       }
 
       const authUrl = SSOService.getGoogleAuthUrl();
-      res.json({
+      return res.json({
         success: true,
         data: { url: authUrl }
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -28,7 +26,7 @@ export class SSOController {
 
   static async handleGoogleCallback(req: Request, res: Response) {
     try {
-      const { code, state } = req.query;
+      const { code } = req.query;
 
       if (!code) {
         return res.status(400).json({
@@ -40,12 +38,15 @@ export class SSOController {
       const { user, isNewUser } = await SSOService.handleGoogleCallback(code as string);
 
       const { generateTokens } = await import('../middleware/auth.js');
+      const { setAuthCookies } = await import('../middleware/cookies.js');
       const tokens = generateTokens(
-        user._id.toString(), 
-        user.tenantId?.toString() || '', 
-        user.role, 
-        false
+        user._id.toString(),
+        user.tenantId?.toString() || '',
+        user.role,
+        false,
+        (user as any).tokenVersion || 0
       );
+      setAuthCookies(res, tokens);
 
       if (user.twoFactorEnabled) {
         return res.json({
@@ -58,7 +59,7 @@ export class SSOController {
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         data: {
           tokens,
@@ -73,9 +74,10 @@ export class SSOController {
         }
       });
     } catch (error: any) {
-      res.status(500).json({
+      const status = typeof error?.statusCode === 'number' ? error.statusCode : 502;
+      return res.status(status).json({
         success: false,
-        error: error.message
+        error: error.message || 'Google authentication failed'
       });
     }
   }
@@ -94,15 +96,16 @@ export class SSOController {
 
       const user = await SSOService.linkGoogleAccount(userId, code);
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Google account linked successfully',
         data: { provider: user.provider }
       });
     } catch (error: any) {
-      res.status(400).json({
+      const status = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      return res.status(status).json({
         success: false,
-        error: error.message
+        error: error.message || 'Failed to link Google account'
       });
     }
   }
@@ -113,20 +116,21 @@ export class SSOController {
 
       await SSOService.unlinkGoogleAccount(userId);
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Google account unlinked successfully'
       });
     } catch (error: any) {
-      res.status(500).json({
+      const status = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      return res.status(status).json({
         success: false,
-        error: error.message
+        error: error.message || 'Failed to unlink Google account'
       });
     }
   }
 
-  static getSSOStatus(req: Request, res: Response) {
-    res.json({
+  static getSSOStatus(_req: Request, res: Response) {
+    return res.json({
       success: true,
       data: {
         google: SSOService.isGoogleSSOEnabled()

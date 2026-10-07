@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Content, type ContentType } from '../models/index.js';
+import { Content, type ContentTypeEnum } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { cacheGet, cacheSet } from '../config/redis.js';
 
@@ -25,7 +25,7 @@ export const getContentByType = asyncHandler(async (req: Request, res: Response)
   // Query published content
   const contents = await Content.find({
     tenantId,
-    type: type as ContentType,
+    type: type as ContentTypeEnum,
     status: 'published',
     isDeleted: false,
     $or: [
@@ -43,11 +43,11 @@ export const getContentByType = asyncHandler(async (req: Request, res: Response)
       name: c.name,
       slug: c.slug,
       ...c.data,
-      metadata: c.metadata,
+      metadata: (c as any).meta,
       publishedAt: c.publishedAt,
-      order: c.order,
-      tags: c.tags,
-      category: c.category,
+      order: (c as any).meta?.order,
+      tags: (c as any).meta?.tags,
+      category: (c as any).meta?.category,
     })),
   };
   
@@ -77,7 +77,7 @@ export const getContentBySlug = asyncHandler(async (req: Request, res: Response)
   // Query published content
   const content = await Content.findOne({
     tenantId,
-    type: type as ContentType,
+    type: type as ContentTypeEnum,
     slug,
     status: 'published',
     isDeleted: false,
@@ -99,11 +99,11 @@ export const getContentBySlug = asyncHandler(async (req: Request, res: Response)
       name: content.name,
       slug: content.slug,
       ...content.data,
-      metadata: content.metadata,
+      metadata: (content as any).meta,
       publishedAt: content.publishedAt,
-      tags: content.tags,
-      category: content.category,
-      author: content.author,
+      tags: (content as any).meta?.tags,
+      category: (content as any).meta?.category,
+      author: (content as any).meta?.author,
     },
   };
   
@@ -119,7 +119,7 @@ export const getContentBySlug = asyncHandler(async (req: Request, res: Response)
  */
 export const getHeroSections = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   req.params.type = 'hero_section';
-  return getContentByType(req, res);
+  return (getContentByType as any)(req, res);
 });
 
 /**
@@ -128,7 +128,7 @@ export const getHeroSections = asyncHandler(async (req: Request, res: Response):
  */
 export const getNavigation = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   req.params.type = 'navigation';
-  return getContentByType(req, res);
+  return (getContentByType as any)(req, res);
 });
 
 /**
@@ -137,7 +137,7 @@ export const getNavigation = asyncHandler(async (req: Request, res: Response): P
  */
 export const getFooter = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   req.params.type = 'footer';
-  return getContentByType(req, res);
+  return (getContentByType as any)(req, res);
 });
 
 /**
@@ -196,11 +196,11 @@ export const getBlogs = asyncHandler(async (req: Request, res: Response): Promis
         title: (b.data as Record<string, unknown>).title,
         excerpt: (b.data as Record<string, unknown>).excerpt,
         featuredImage: (b.data as Record<string, unknown>).featured_image,
-        author: b.author || (b.data as Record<string, unknown>).author,
-        metadata: b.metadata,
+        author: (b as any).meta?.author || (b.data as Record<string, unknown>).author,
+        metadata: (b as any).meta,
         publishedAt: b.publishedAt,
-        tags: b.tags,
-        category: b.category,
+        tags: (b as any).meta?.tags,
+        category: (b as any).meta?.category,
       })),
       pagination: {
         page: Number(page),
@@ -223,7 +223,7 @@ export const getBlogs = asyncHandler(async (req: Request, res: Response): Promis
  */
 export const getBlogBySlug = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   req.params.type = 'blog_post';
-  return getContentBySlug(req, res);
+  return (getContentBySlug as any)(req, res);
 });
 
 /**
@@ -232,7 +232,7 @@ export const getBlogBySlug = asyncHandler(async (req: Request, res: Response): P
  */
 export const getFAQs = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   req.params.type = 'faq';
-  return getContentByType(req, res);
+  return (getContentByType as any)(req, res);
 });
 
 /**
@@ -241,7 +241,7 @@ export const getFAQs = asyncHandler(async (req: Request, res: Response): Promise
  */
 export const getTestimonials = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   req.params.type = 'testimonials';
-  return getContentByType(req, res);
+  return (getContentByType as any)(req, res);
 });
 
 /**
@@ -250,7 +250,7 @@ export const getTestimonials = asyncHandler(async (req: Request, res: Response):
  */
 export const getGallery = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   req.params.type = 'gallery';
-  return getContentByType(req, res);
+  return (getContentByType as any)(req, res);
 });
 
 /**
@@ -302,7 +302,7 @@ export const searchContent = asyncHandler(async (req: Request, res: Response): P
         slug: r.slug,
         title: (r.data as Record<string, unknown>).title || r.name,
         excerpt: (r.data as Record<string, unknown>).excerpt,
-        metadata: r.metadata,
+        metadata: (r as any).meta,
         publishedAt: r.publishedAt,
       })),
       pagination: {

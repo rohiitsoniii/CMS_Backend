@@ -10,7 +10,7 @@ export const trackAPICall = async (req: Request, res: Response, next: NextFuncti
         const responseTime = Date.now() - startTime;
         
         await analyticsService.trackEvent({
-          tenantId: req.user.tenant.toString(),
+          tenantId: (req.user.tenantId as unknown as { toString(): string }).toString(),
           userId: req.user._id.toString(),
           type: 'api_call',
           category: 'api',

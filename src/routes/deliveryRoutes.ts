@@ -16,8 +16,9 @@ import {
 } from '../controllers/chatbotController.js';
 import { ContentTypes } from '../models/index.js';
 import { authenticateAPIKey, apiKeyRateLimiter } from '../middleware/index.js';
+import { validate, body } from '../middleware/validate.js';
 import { cacheResponse } from '../middleware/cache.js';
-import { deliveryRateLimit, deliveryHeavyRateLimit, withDeliveryCache } from '../middleware/deliveryRateLimit.js';
+import { deliveryRateLimit, deliveryHeavyRateLimit } from '../middleware/deliveryRateLimit.js';
 import { SeoSitemapService } from '../services/seoSitemapService.js';
 import { Project } from '../models/index.js';
 
@@ -31,6 +32,33 @@ router.use(apiKeyRateLimiter);
 
 // Per-project isolation rate limiting (protects tenants from each other)
 router.use(deliveryRateLimit);
+
+// Validate :projectSlug on every delivery route (slug pattern only —
+// prevents operator/RegExp payloads reaching Mongoose queries)
+router.param('projectSlug', (_req, res, next, value) => {
+  if (typeof value !== 'string' || !/^[a-z0-9-]{1,200}$/.test(value)) {
+    res.status(400).json({
+      success: false,
+      error: 'Validation failed',
+      details: [{ field: 'projectSlug', message: 'Invalid project slug' }],
+    });
+    return;
+  }
+  next();
+});
+
+// Validate content :slug params the same way
+router.param('slug', (_req, res, next, value) => {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 200) {
+    res.status(400).json({
+      success: false,
+      error: 'Validation failed',
+      details: [{ field: 'slug', message: 'Invalid slug' }],
+    });
+    return;
+  }
+  next();
+});
 
 // ============================
 // Full Site Content
@@ -112,10 +140,26 @@ router.get('/:projectSlug/chatbot/config', getChatbotConfig);
 router.get('/:projectSlug/chat/suggestions', getChatSuggestions);
 
 // Chat with bot (keyword matching + optional local Ollama)
-router.post('/:projectSlug/chat', chatWithBot);
+router.post(
+  '/:projectSlug/chat',
+  [
+    body('message').isString().trim().notEmpty().isLength({ max: 4000 }),
+    body('sessionId').optional().isString().isLength({ max: 200 }),
+  ],
+  validate,
+  chatWithBot
+);
 
 // Rate response
-router.post('/:projectSlug/chat/rate', rateChatResponse);
+router.post(
+  '/:projectSlug/chat/rate',
+  [
+    body('knowledgeId').isMongoId().withMessage('Invalid knowledgeId'),
+    body('helpful').isBoolean(),
+  ],
+  validate,
+  rateChatResponse
+);
 
 // ============================
 // Sitemap (Auto-updated on publish)
@@ -129,9 +173,9 @@ router.get('/:projectSlug/sitemap.xml', async (req, res) => {
     const xml = await SeoSitemapService.generateSitemap(project._id.toString());
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=1800');
-    res.send(xml);
+    return res.send(xml);
   } catch (err: any) {
-    res.status(500).send(`<?xml version="1.0"?><error>${err.message}</error>`);
+    return res.status(500).send(`<?xml version="1.0"?><error>${err.message}</error>`);
   }
 });
 

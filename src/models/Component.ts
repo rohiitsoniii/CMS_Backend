@@ -113,12 +113,12 @@ ComponentSchema.virtual('fieldCount').get(function() {
 });
 
 // Methods
-ComponentSchema.methods.getField = function(fieldName: string): IFieldDefinition | undefined {
-  return this.fields.find(f => f.name === fieldName);
+ComponentSchema.methods.getField = function(this: any, fieldName: string): IFieldDefinition | undefined {
+  return this.fields.find((f: IFieldDefinition) => f.name === fieldName);
 };
 
-ComponentSchema.methods.hasField = function(fieldName: string): boolean {
-  return this.fields.some(f => f.name === fieldName);
+ComponentSchema.methods.hasField = function(this: any, fieldName: string): boolean {
+  return this.fields.some((f: IFieldDefinition) => f.name === fieldName);
 };
 
 // Static methods
@@ -179,8 +179,8 @@ ComponentSchema.pre('save', async function(next) {
 });
 
 // Prevent deletion if component is in use
-ComponentSchema.pre('deleteOne', { document: true, query: false }, async function(next) {
-  const Component = mongoose.model<IComponent>('Component');
+ComponentSchema.pre('deleteOne', { document: true, query: false }, async function(this: any, next) {
+  const Component = mongoose.model<IComponent>('Component') as any;
   const isUsed = await Component.isInUse(this._id);
   if (isUsed) {
     throw new Error('Cannot delete component that is in use');

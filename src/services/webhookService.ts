@@ -2,6 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import Webhook, { IWebhook } from '../models/Webhook.js';
 import { WebhookLogService } from './webhookLogService.js';
+import { webhookDeliveryTotal } from '../utils/metrics.js';
 
 interface WebhookPayload {
   event: string;
@@ -119,6 +120,7 @@ export class WebhookService {
         lastTriggeredAt: new Date(),
         $set: { failureCount: 0 }
       });
+      webhookDeliveryTotal.labels(webhook.tenantId.toString(), 'success').inc();
 
     } catch (error: any) {
       console.error(`Webhook delivery failed for ${webhook.name}:`, error.message);
@@ -140,6 +142,7 @@ export class WebhookService {
       await Webhook.findByIdAndUpdate(webhook._id, {
         $inc: { failureCount: 1 }
       });
+      webhookDeliveryTotal.labels(webhook.tenantId.toString(), 'failed').inc();
       
       if (webhook.failureCount >= 10) {
         await Webhook.findByIdAndUpdate(webhook._id, {

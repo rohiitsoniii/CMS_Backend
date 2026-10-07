@@ -1,5 +1,8 @@
 import { Tenant, User, Content, APIKey, Project } from '../models/index.js';
 import { connectDatabase, disconnectDatabase } from '../config/database.js';
+import { assertScriptSafe } from './guards.js';
+
+assertScriptSafe({ scriptName: 'seed', destructive: true });
 
 const seedData = async () => {
   try {
@@ -79,7 +82,7 @@ const seedData = async () => {
 
     // Create API key
     const keyPair = APIKey.generateKeyPair();
-    const apiKey = await APIKey.create({
+    await APIKey.create({
       tenantId: tenant._id,
       name: 'Development API Key',
       description: 'API key for local development',

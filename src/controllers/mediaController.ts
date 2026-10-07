@@ -8,6 +8,8 @@ import { MediaFile, Tenant } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { subscriptionPlans } from '../config/index.js';
 import aiService from '../services/aiService.js';
+import { getImageMetadata, transformImage, resolveImageVariant } from '../utils/imageProcessor.js';
+import { escapeSearchTerm } from '../utils/queryBuilder.js';
 
 
 // Configure multer for memory storage
@@ -126,6 +128,19 @@ export const uploadFile = asyncHandler(async (req: Request, res: Response): Prom
   }
 
   
+  // Extract real dimensions for images (best-effort; undefined otherwise)
+  let dimensions: { width: number; height: number } | undefined = undefined;
+  if (req.file.mimetype.startsWith('image/')) {
+    try {
+      const meta = await getImageMetadata(req.file.buffer);
+      if (meta.width > 0 && meta.height > 0) {
+        dimensions = { width: meta.width, height: meta.height };
+      }
+    } catch (error) {
+      console.error('Failed to extract image dimensions:', error);
+    }
+  }
+
   // Create MediaFile record
   const mediaFile = await MediaFile.create({
     tenantId: req.tenantId,
@@ -135,7 +150,7 @@ export const uploadFile = asyncHandler(async (req: Request, res: Response): Prom
     size: req.file.size,
     storageType: 'gridfs',
     storageKey: uploadStream.id.toString(),
-    url: `/api/v1/media/${uploadStream.id}`,
+    url: buildPublicMediaUrl(uploadStream.id.toString()),
     dimensions,
     folder: req.body.folder || 'uploads',
     tags: aiTags,
@@ -180,11 +195,12 @@ export const getMediaFiles = asyncHandler(async (req: Request, res: Response): P
       query.mimeType = mimeTypes[type as string];
     }
   }
-  if (search) {
+  if (search && typeof search === 'string') {
+    const term = escapeSearchTerm(search);
     query.$or = [
-      { originalName: { $regex: search, $options: 'i' } },
-      { alt: { $regex: search, $options: 'i' } },
-      { tags: { $in: [new RegExp(search as string, 'i')] } },
+      { originalName: { $regex: term, $options: 'i' } },
+      { alt: { $regex: term, $options: 'i' } },
+      { tags: { $in: [new RegExp(term, 'i')] } },
     ];
   }
   
@@ -303,28 +319,56 @@ export const deleteMediaFile = asyncHandler(async (req: Request, res: Response):
 
 /**
  * Serve media file (public)
- * GET /api/v1/media/:id
+ * GET /api/v1/media/:id[?variant=thumb|small|medium|large&w=&h=&fit=]
+ *
+ * Images accept on-demand responsive variants (?variant= or ?w/?h/?fit=).
+ * Non-images ignore transform params. When CDN_URL is set, uploads record
+ * CDN-prefixed URLs (see buildPublicMediaUrl) and edge caches serve them.
  */
 export const serveMediaFile = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const isMongoId = mongoose.isValidObjectId(req.params.id);
   const file = await MediaFile.findOne({
-    storageKey: req.params.id,
-    isPublic: true,
+    $or: [
+      { storageKey: req.params.id },
+      ...(isMongoId ? [{ _id: req.params.id }] : []),
+      { filename: req.params.id }
+    ]
   });
-  
+
   if (!file) {
     throw new AppError('File not found', 404);
   }
-  
+
+  // Public serving route must not leak private files
+  if (!file.isPublic) {
+    throw new AppError('File is not public', 403);
+  }
+
   if (file.storageType === 'gridfs') {
     const bucket = getGridFSBucket();
+
+    // On-demand image variants (?variant= / ?w=&h=)
+    if (file.mimeType.startsWith('image/')) {
+      const transform = resolveImageVariant(req.query as Record<string, unknown>);
+      if (transform) {
+        const original = await gridfsToBuffer(bucket, file.storageKey);
+        const result = await transformImage(original, transform);
+        res.set('Content-Type', mimeForImageFormat(result.metadata.format));
+        res.set('Content-Length', result.size.toString());
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+        res.send(result.buffer);
+        return;
+      }
+    }
+
     const downloadStream = bucket.openDownloadStream(new ObjectId(file.storageKey));
-    
+
     res.set('Content-Type', file.mimeType);
     res.set('Content-Length', file.size.toString());
     res.set('Cache-Control', 'public, max-age=31536000'); // 1 year cache
-    
+
     downloadStream.pipe(res);
-    
+
     downloadStream.on('error', () => {
       res.status(404).json({
         success: false,
@@ -335,6 +379,47 @@ export const serveMediaFile = asyncHandler(async (req: Request, res: Response): 
     throw new AppError('Storage type not supported', 500);
   }
 });
+
+/**
+ * Public URL for a media file. When CDN_URL is configured (e.g. CloudFront),
+ * uploads record CDN-prefixed URLs so reads bypass the API entirely.
+ */
+export const buildPublicMediaUrl = (storageId: string): string => {
+  const cdn = (process.env.CDN_URL || '').replace(/\/$/, '');
+  if (cdn) return `${cdn}/media/${storageId}`;
+  return `/api/v1/media/${storageId}`;
+};
+
+const mimeForImageFormat = (format: string): string => {
+  switch (format.toLowerCase()) {
+    case 'jpeg':
+    case 'jpg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'avif':
+      return 'image/avif';
+    case 'gif':
+      return 'image/gif';
+    default:
+      return 'image/jpeg';
+  }
+};
+
+const gridfsToBuffer = async (bucket: GridFSBucket, storageKey: string): Promise<Buffer> => {
+  try {
+    const stream = bucket.openDownloadStream(new ObjectId(storageKey));
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk as Buffer);
+    }
+    return Buffer.concat(chunks);
+  } catch {
+    throw new AppError('File not found in storage', 404);
+  }
+};
 
 /**
  * Get folders list

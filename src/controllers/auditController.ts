@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AuditLog } from '../models/index.js';
 import { asyncHandler } from '../middleware/index.js';
 
@@ -6,7 +6,7 @@ import { asyncHandler } from '../middleware/index.js';
  * Get audit logs
  * GET /api/v1/audit-logs
  */
-export const getAuditLogs = asyncHandler(async (req: Request, res: Response) => {
+export const getAuditLogs = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { 
     page = 1, 
     limit = 20, 

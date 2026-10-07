@@ -10,9 +10,9 @@ export const archiveController = {
       const userId = req.user!.id;
 
       const archived = await ArchiveService.archiveContent(contentId, userId, reason);
-      res.json(archived);
+      return res.json(archived);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -21,9 +21,9 @@ export const archiveController = {
     try {
       const { archiveId } = req.params;
       const restored = await ArchiveService.restoreFromArchive(archiveId);
-      res.json(restored);
+      return res.json(restored);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -34,9 +34,9 @@ export const archiveController = {
       const filters = req.query;
 
       const items = await ArchiveService.getArchivedItems(projectId, filters);
-      res.json({ success: true, data: items });
+      return res.json({ success: true, data: items });
     } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message });
+      return res.status(400).json({ success: false, error: error.message });
     }
   },
 
@@ -47,9 +47,9 @@ export const archiveController = {
       const userId = req.user!.id;
 
       const results = await ArchiveService.bulkArchive(contentIds, userId, reason);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -58,9 +58,9 @@ export const archiveController = {
     try {
       const { archiveId } = req.params;
       await ArchiveService.permanentDelete(archiveId);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -69,9 +69,9 @@ export const archiveController = {
     try {
       const { projectId } = req.params;
       const stats = await ArchiveService.getArchiveStats(projectId);
-      res.json(stats);
+      return res.json(stats);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

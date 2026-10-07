@@ -1,21 +1,21 @@
 import { Request, Response } from 'express';
-import { asyncHandler, AppError } from '../middleware/index.js';
+import mongoose from 'mongoose';
+import { asyncHandler } from '../middleware/index.js';
 import { BackupService } from '../services/backupService.js';
 import { AuditService } from '../services/AuditService.js';
-import fs from 'fs';
 
 /**
  * Create full backup
  * POST /api/v1/backups
  */
 export const createBackup = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { projectId } = req.body;
+  const projectId = req.params.projectId || req.body.projectId;
 
   let backup;
   if (projectId) {
-    backup = await BackupService.createProjectBackup(projectId, req.tenantId);
+    backup = await BackupService.createProjectBackup(new mongoose.Types.ObjectId(projectId as string), req.tenantId as any);
   } else {
-    backup = await BackupService.createBackup(req.tenantId);
+    backup = await BackupService.createBackup(req.tenantId as any);
   }
 
   await AuditService.log(req, 'backup.create', {
@@ -36,7 +36,10 @@ export const createBackup = asyncHandler(async (req: Request, res: Response): Pr
  * GET /api/v1/backups
  */
 export const listBackups = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const backups = await BackupService.listBackups();
+  const backups = await BackupService.listBackups(
+    req.tenantId as any,
+    req.params.projectId
+  );
 
   res.json({
     success: true,
@@ -51,11 +54,7 @@ export const listBackups = asyncHandler(async (req: Request, res: Response): Pro
 export const downloadBackup = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { filename } = req.params;
 
-  const filepath = await BackupService.getBackupPath(filename);
-
-  if (!fs.existsSync(filepath)) {
-    throw new AppError('Backup not found', 404);
-  }
+  const filepath = await BackupService.getBackupPath(filename, req.tenantId as any);
 
   res.download(filepath, filename);
 });
@@ -67,7 +66,7 @@ export const downloadBackup = asyncHandler(async (req: Request, res: Response): 
 export const restoreBackup = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { filename } = req.params;
 
-  await BackupService.restoreBackup(filename, req.tenantId);
+  await BackupService.restoreBackup(filename, req.tenantId as any);
 
   await AuditService.log(req, 'backup.restore', {
     type: 'Backup',
@@ -88,7 +87,7 @@ export const restoreBackup = asyncHandler(async (req: Request, res: Response): P
 export const deleteBackup = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { filename } = req.params;
 
-  await BackupService.deleteBackup(filename);
+  await BackupService.deleteBackup(filename, req.tenantId as any);
 
   await AuditService.log(req, 'backup.delete', {
     type: 'Backup',
@@ -107,7 +106,7 @@ export const deleteBackup = asyncHandler(async (req: Request, res: Response): Pr
  * POST /api/v1/backups/cleanup
  */
 export const cleanupBackups = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { daysToKeep = 30 } = req.body;
+  const daysToKeep = Number(req.body.daysToKeep ?? 30);
 
   const deletedCount = await BackupService.cleanupOldBackups(daysToKeep);
 

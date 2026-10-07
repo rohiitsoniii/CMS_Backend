@@ -4,16 +4,17 @@
  * Handles scheduled publishing, unpublishing, and recurring content
  */
 
-import cron from 'node-cron';
+import cron, { ScheduledTask as CronScheduledTask } from 'node-cron';
 import { Content } from '../models/Content';
 import collaborationService from './collaborationService';
+import { contentPublishedTotal } from '../utils/metrics.js';
 
 interface ScheduledTask {
   id: string;
   contentId: string;
   action: 'publish' | 'unpublish';
   scheduledAt: Date;
-  cronTask?: cron.ScheduledTask;
+  cronTask?: CronScheduledTask;
   recurring?: {
     pattern: string; // cron pattern
     endDate?: Date;
@@ -163,7 +164,7 @@ class SchedulingService {
   private async processScheduledTasks() {
     const now = new Date();
 
-    for (const [taskId, task] of this.tasks.entries()) {
+    for (const [taskId, task] of Array.from(this.tasks.entries())) {
       // Skip recurring tasks (handled by cron)
       if (task.recurring) continue;
 
@@ -198,8 +199,13 @@ class SchedulingService {
 
       // Update status to published
       content.status = 'published';
+      if (!content.meta) {
+        content.meta = {};
+      }
+      content.meta.publishedAt = new Date();
       content.publishedAt = new Date();
       await content.save();
+      contentPublishedTotal.labels(content.tenantId.toString(), content.type).inc();
 
       console.log(`✅ Auto-published content: ${content.name}`);
 

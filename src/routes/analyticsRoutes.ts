@@ -16,7 +16,7 @@ router.get('/error-rate', analyticsController.getErrorRate);
 router.post('/track', analyticsController.trackEvent);
 router.get('/content/:contentId', analyticsController.getContentAnalytics);
 
-router.get('/overview', (req, res) => {
+router.get('/overview', (_req, res) => {
   res.json({
     success: true,
     data: {
@@ -34,7 +34,7 @@ router.get('/overview', (req, res) => {
   });
 });
 
-router.get('/pages', (req, res) => {
+router.get('/pages', (_req, res) => {
   res.json({
     success: true,
     data: [
@@ -45,7 +45,7 @@ router.get('/pages', (req, res) => {
   });
 });
 
-router.get('/referrers', (req, res) => {
+router.get('/referrers', (_req, res) => {
   res.json({
     success: true,
     data: [
@@ -56,7 +56,7 @@ router.get('/referrers', (req, res) => {
   });
 });
 
-router.get('/devices', (req, res) => {
+router.get('/devices', (_req, res) => {
   res.json({
     success: true,
     data: {
@@ -69,7 +69,7 @@ router.get('/devices', (req, res) => {
   });
 });
 
-router.get('/geographic', (req, res) => {
+router.get('/geographic', (_req, res) => {
   res.json({
     success: true,
     data: [
@@ -81,7 +81,7 @@ router.get('/geographic', (req, res) => {
   });
 });
 
-router.get('/realtime', (req, res) => {
+router.get('/realtime', (_req, res) => {
   res.json({
     success: true,
     data: {

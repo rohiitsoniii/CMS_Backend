@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
 import * as authController from '../controllers/authController.js';
 import { authenticateJWT, requirePermission } from '../middleware/index.js';
-import { authBruteForceLimit } from '../middleware/bruteForce.js';
+import { authBruteForceLimit, passwordResetBruteForceLimit } from '../middleware/bruteForce.js';
 
 // Shared validation result checker
 const validate = (req: Request, res: Response, next: NextFunction): void => {
@@ -39,6 +39,19 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+const forgotPasswordValidation = [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+];
+
+const resetPasswordValidation = [
+  body('token').trim().notEmpty().withMessage('Reset token is required'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain uppercase, lowercase, and number'),
+];
+
 const apiKeyValidation = [
   body('name').trim().notEmpty().withMessage('API key name is required'),
   body('description').optional().trim(),
@@ -50,7 +63,10 @@ const apiKeyValidation = [
 // Public routes
 router.post('/register', authBruteForceLimit, registerValidation, validate, authController.register);
 router.post('/login', authBruteForceLimit, loginValidation, validate, authController.login);
-router.post('/refresh', authController.refresh);
+router.post('/refresh', authBruteForceLimit, authController.refresh);
+router.post('/forgot-password', passwordResetBruteForceLimit, forgotPasswordValidation, validate, authController.forgotPassword);
+router.post('/reset-password', authBruteForceLimit, resetPasswordValidation, validate, authController.resetPassword);
+router.post('/logout', authenticateJWT, authController.logout);
 
 // Protected routes
 router.get('/me', authenticateJWT, authController.getProfile);

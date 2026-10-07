@@ -1,5 +1,9 @@
 import { Types } from 'mongoose';
-import { User, Content, TeamMember, Workflow, Notification, SMTPConfig } from '../models/index.js';
+import { User, Content } from '../models/index.js';
+import { TeamMember } from '../models/TeamMember.js';
+import Workflow from '../models/Workflow.js';
+import { Notification } from '../models/Notification.js';
+import { SMTPConfig } from '../models/SMTPConfig.js';
 import { config } from '../config/index.js';
 import nodemailer from 'nodemailer';
 import collaborationService from './collaborationService.js';
@@ -18,7 +22,7 @@ export class NotificationService {
   /**
    * Send email using Nodemailer and SMTP config
    */
-  private static async sendEmail(data: EmailData, tenantId: string): Promise<void> {
+  private static async sendEmail(data: EmailData, _tenantId?: string): Promise<void> {
     try {
       // Find SMTP config for the project/tenant
       // For now, using a simplified lookup. In production, this would be optimized.
@@ -56,7 +60,7 @@ export class NotificationService {
       const info = await transporter.sendMail(mailOptions);
       console.log('✅ Email sent: %s', info.messageId);
 
-      if (smtpConfig.provider === 'system') {
+      if ((smtpConfig as any).provider === 'system') {
         smtpConfig.incrementDailyCount();
         await smtpConfig.save();
       }
@@ -203,7 +207,7 @@ export class NotificationService {
       if (!content || !workflow || !requester) return;
 
       // Find current step approvers
-      const currentStep = workflow.steps.find(step => step.status === 'pending');
+      const currentStep = (workflow.steps as any).find((step: any) => step.status === 'pending');
       if (!currentStep || !currentStep.assignedTo) return;
 
       const approvers = Array.isArray(currentStep.assignedTo) 

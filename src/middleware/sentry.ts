@@ -1,50 +1,48 @@
 import express from 'express';
-import Sentry from '@sentry/node';
-import { config } from './index.js';
+import * as Sentry from '@sentry/node';
 
-if (process.env.SENTRY_DSN) {
+const dsn = process.env.SENTRY_DSN;
+const enabled = Boolean(dsn);
+
+if (enabled) {
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV,
-    integrations: [
-      new Sentry.Integrations.Http({ tracing: true }),
-      new Sentry.Integrations.Express(),
-      new Sentry.Integrations.MongoDB(),
-    ],
+    dsn,
+    environment: process.env.NODE_ENV || 'development',
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    beforeSend(event) {
-      if (process.env.NODE_ENV === 'development') {
-        return null;
-      }
-      return event;
-    },
   });
 }
 
-export const sentryMiddleware = express();
+/**
+ * Request middleware — no-op router (the SDK instruments via diagnostics
+ * channel once init() runs). Kept as a mountable router so app.ts wiring
+ * stays stable whether or not a DSN is configured.
+ */
+export const sentryMiddleware = express.Router();
 
-if (process.env.SENTRY_DSN) {
-  sentryMiddleware.use(Sentry.Handlers.requestHandler());
-  sentryMiddleware.use(Sentry.Handlers.tracingHandler());
+/**
+ * Error middleware — must be mounted BEFORE the app's own error handler
+ * so exceptions reach Sentry with request context.
+ */
+export const errorMiddleware = express.Router();
+
+if (enabled) {
+  errorMiddleware.use(Sentry.expressErrorHandler());
 }
 
-export const errorMiddleware = express();
-
-if (process.env.SENTRY_DSN) {
-  errorMiddleware.use(Sentry.Handlers.errorHandler());
-}
-
-export function captureException(error: Error, context?: any) {
-  if (process.env.SENTRY_DSN) {
-    Sentry.captureException(error, { extra: context });
+export function captureException(error: Error, context?: Record<string, unknown>) {
+  if (enabled) {
+    Sentry.captureException(error, context ? { extra: context } : undefined);
+  } else if (process.env.NODE_ENV !== 'test') {
+    console.error('Error:', error.message, context);
   }
-  console.error('Error:', error.message, context);
 }
 
-export function captureMessage(message: string, level: Sentry.Severity = Sentry.Severity.Info) {
-  if (process.env.SENTRY_DSN) {
+export function captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info') {
+  if (enabled) {
     Sentry.captureMessage(message, level);
   }
 }
+
+export const isSentryEnabled = (): boolean => enabled;
 
 export default Sentry;

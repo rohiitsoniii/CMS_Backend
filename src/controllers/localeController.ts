@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
 import LocaleConfig, { ILocale } from '../models/LocaleConfig';
 import { Content } from '../models/Content';
-import translationService, { SUPPORTED_LANGUAGES } from '../services/translationService';
-import { encrypt } from '../services/cryptoService';
+import { SUPPORTED_LANGUAGES } from '../services/translationService';
 import { enqueueTranslation } from '../workers/translationWorker';
 
 /**
@@ -28,15 +27,15 @@ export const getLocaleConfig = async (req: Request, res: Response) => {
     }
 
     // Get or create default configuration
-    const config = await LocaleConfig.getOrCreateDefault(tenantId, userId);
+    const config = await (LocaleConfig as any).getOrCreateDefault(tenantId, userId);
 
-    res.json({
+    return res.json({
       success: true,
       data: { config }
     });
   } catch (error: any) {
     console.error('Error fetching locale config:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch locale configuration',
       error: error.message
@@ -62,7 +61,7 @@ export const updateLocaleConfig = async (req: Request, res: Response) => {
       });
     }
 
-    let config = await LocaleConfig.findByTenant(tenantId);
+    let config = await (LocaleConfig as any).findByTenant(tenantId);
 
     if (!config) {
       // Create new configuration
@@ -100,14 +99,14 @@ export const updateLocaleConfig = async (req: Request, res: Response) => {
 
     await config.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Locale configuration updated successfully',
       data: { config }
     });
   } catch (error: any) {
     console.error('Error updating locale config:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to update locale configuration',
       error: error.message
@@ -140,7 +139,7 @@ export const addLocale = async (req: Request, res: Response) => {
       });
     }
 
-    const config = await LocaleConfig.getOrCreateDefault(tenantId, userId);
+    const config = await (LocaleConfig as any).getOrCreateDefault(tenantId, userId);
 
     // Check if locale already exists
     const existingLocale = config.getLocale(code);
@@ -153,7 +152,7 @@ export const addLocale = async (req: Request, res: Response) => {
 
     // If setting as default, unset other defaults
     if (isDefault) {
-      config.locales.forEach(l => {
+      config.locales.forEach((l: any) => {
         l.isDefault = false;
       });
       config.defaultLocale = code;
@@ -172,14 +171,14 @@ export const addLocale = async (req: Request, res: Response) => {
     config.updatedBy = userId;
     await config.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Locale added successfully',
       data: { locale: newLocale, config }
     });
   } catch (error: any) {
     console.error('Error adding locale:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to add locale',
       error: error.message
@@ -206,7 +205,7 @@ export const updateLocale = async (req: Request, res: Response) => {
       });
     }
 
-    const config = await LocaleConfig.findByTenant(tenantId);
+    const config = await (LocaleConfig as any).findByTenant(tenantId);
 
     if (!config) {
       return res.status(404).json({
@@ -231,7 +230,7 @@ export const updateLocale = async (req: Request, res: Response) => {
 
     // Handle default locale change
     if (isDefault !== undefined && isDefault) {
-      config.locales.forEach(l => {
+      config.locales.forEach((l: any) => {
         l.isDefault = l.code === code;
       });
       config.defaultLocale = code;
@@ -240,14 +239,14 @@ export const updateLocale = async (req: Request, res: Response) => {
     config.updatedBy = userId;
     await config.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Locale updated successfully',
       data: { locale, config }
     });
   } catch (error: any) {
     console.error('Error updating locale:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to update locale',
       error: error.message
@@ -273,7 +272,7 @@ export const removeLocale = async (req: Request, res: Response) => {
       });
     }
 
-    const config = await LocaleConfig.findByTenant(tenantId);
+    const config = await (LocaleConfig as any).findByTenant(tenantId);
 
     if (!config) {
       return res.status(404).json({
@@ -308,7 +307,7 @@ export const removeLocale = async (req: Request, res: Response) => {
     }
 
     // Remove locale
-    config.locales = config.locales.filter(l => l.code !== code);
+    config.locales = config.locales.filter((l: any) => l.code !== code);
     
     // Remove from fallback chain
     delete config.fallbackChain[code];
@@ -316,14 +315,14 @@ export const removeLocale = async (req: Request, res: Response) => {
     config.updatedBy = userId;
     await config.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Locale removed successfully',
       data: { config }
     });
   } catch (error: any) {
     console.error('Error removing locale:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to remove locale',
       error: error.message
@@ -348,10 +347,10 @@ export const getEnabledLocales = async (req: Request, res: Response) => {
       });
     }
 
-    const config = await LocaleConfig.getOrCreateDefault(tenantId, userId);
-    const enabledLocales = config.locales.filter(l => l.isEnabled);
+    const config = await (LocaleConfig as any).getOrCreateDefault(tenantId, userId);
+    const enabledLocales = config.locales.filter((l: any) => l.isEnabled);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         locales: enabledLocales,
@@ -361,7 +360,7 @@ export const getEnabledLocales = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching enabled locales:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch enabled locales',
       error: error.message
@@ -373,8 +372,8 @@ export const getEnabledLocales = async (req: Request, res: Response) => {
  * @desc    Get curated list of supported languages
  * @access  Private
  */
-export const getSupportedLanguages = async (req: Request, res: Response) => {
-  res.json({
+export const getSupportedLanguages = async (_req: Request, res: Response) => {
+  return res.json({
     success: true,
     data: { languages: SUPPORTED_LANGUAGES }
   });
@@ -399,7 +398,7 @@ export const updateTranslationApiKey = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'API Key is required' });
     }
 
-    const config = await LocaleConfig.getOrCreateDefault(tenantId, userId);
+    const config = await (LocaleConfig as any).getOrCreateDefault(tenantId, userId);
     
     // Encrypt the key before storing — never store plaintext
     try {
@@ -414,12 +413,12 @@ export const updateTranslationApiKey = async (req: Request, res: Response) => {
     config.updatedBy = userId;
     await config.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Translation API Key saved securely (AES-256 encrypted)'
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to update API Key', error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to update API Key', error: error.message });
   }
 };
 
@@ -438,7 +437,7 @@ export const translateContent = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const config = await LocaleConfig.findByTenant(tenantId);
+    const config = await (LocaleConfig as any).findByTenant(tenantId);
     if (!config || !config.autoTranslate) {
       return res.status(400).json({ success: false, message: 'Auto-translation is not enabled. Enable it in Translation Settings.' });
     }
@@ -455,13 +454,13 @@ export const translateContent = async (req: Request, res: Response) => {
       userId: userId.toString(),
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Translation job queued. Poll /api/v1/jobs/:jobId for progress.',
       data: { jobId }
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to queue translation', error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to queue translation', error: error.message });
   }
 };
 
@@ -470,9 +469,9 @@ export const translateContent = async (req: Request, res: Response) => {
  * @desc    Translate all published content for the project
  * @access  Private
  */
-export const translateAllContent = async (req: Request, res: Response) => {
+export const translateAllContent = async (_req: Request, res: Response) => {
     // This would definitely need a worker, but we'll provide the endpoint structure
-    res.json({
+    return res.json({
         success: true,
         message: 'Bulk translation task queued (Worker implementation pending)'
     });

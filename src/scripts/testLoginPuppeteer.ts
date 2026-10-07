@@ -27,7 +27,7 @@ async function runTest() {
         console.log('🌐 [Browser Console]:', text);
       }
     });
-    page.on('pageerror', (err) => console.error('❌ [Browser Page Error]:', err.message));
+    page.on('pageerror', (err: any) => console.error('❌ [Browser Page Error]:', err.message));
 
     console.log('📍 [Step 1] Navigating to http://localhost:5174/login ...');
     await page.goto('http://localhost:5174/login', { waitUntil: 'networkidle0', timeout: 30000 });

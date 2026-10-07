@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { Content } from '../models/Content';
 import ContentType from '../models/ContentType';
 

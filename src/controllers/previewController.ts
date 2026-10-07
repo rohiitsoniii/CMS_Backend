@@ -7,7 +7,7 @@ export class PreviewController {
       const { contentId } = req.params;
       const { expiresIn = 60, projectId, contentTypeId } = req.body;
       const userId = req.user!.id;
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
 
       if (!projectId || !contentTypeId) {
         return res.status(400).json({
@@ -24,7 +24,7 @@ export class PreviewController {
 
       const previewUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/preview/${token}`;
 
-      res.json({
+      return res.json({
         success: true,
         data: {
           token,
@@ -33,7 +33,7 @@ export class PreviewController {
         }
       });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: error.message });
     }
   }
 
@@ -50,18 +50,18 @@ export class PreviewController {
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         data: preview
       });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: error.message });
     }
   }
 
   static async listTokens(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { contentId, projectId, limit = 20, offset = 0 } = req.query;
 
       const result = await PreviewService.listPreviewTokens(tenantId, {
@@ -71,7 +71,7 @@ export class PreviewController {
         offset: Number(offset)
       });
 
-      res.json({
+      return res.json({
         success: true,
         data: result.tokens,
         pagination: {
@@ -81,14 +81,14 @@ export class PreviewController {
         }
       });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: error.message });
     }
   }
 
   static async revokeToken(req: Request, res: Response) {
     try {
       const { tokenId } = req.params;
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
 
       const revoked = await PreviewService.revokePreviewToken(tokenId, tenantId);
 
@@ -99,12 +99,12 @@ export class PreviewController {
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Token revoked successfully'
       });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: error.message });
     }
   }
 }

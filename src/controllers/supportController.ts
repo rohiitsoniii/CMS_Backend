@@ -20,9 +20,9 @@ export const supportController = {
         category,
         priority
       });
-      res.status(201).json(ticket);
+      return res.status(201).json(ticket);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      return res.status(500).json({ message: error.message });
     }
   },
 
@@ -39,9 +39,9 @@ export const supportController = {
         tenantId,
         { status: status as string, priority: priority as string, category: category as string }
       );
-      res.json(tickets);
+      return res.json(tickets);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      return res.status(500).json({ message: error.message });
     }
   },
 
@@ -59,9 +59,9 @@ export const supportController = {
       if (!ticket) {
         return res.status(404).json({ message: 'Ticket not found' });
       }
-      res.json(ticket);
+      return res.json(ticket);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      return res.status(500).json({ message: error.message });
     }
   },
 
@@ -80,27 +80,27 @@ export const supportController = {
         message,
         false
       );
-      res.json(ticket);
+      return res.json(ticket);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      return res.status(500).json({ message: error.message });
     }
   },
 
   async updateTicket(req: Request, res: Response) {
     try {
       const ticket = await supportService.updateTicket(req.params.id, req.body);
-      res.json(ticket);
+      return res.json(ticket);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      return res.status(500).json({ message: error.message });
     }
   },
 
   async closeTicket(req: Request, res: Response) {
     try {
       const ticket = await supportService.closeTicket(req.params.id);
-      res.json(ticket);
+      return res.json(ticket);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      return res.status(500).json({ message: error.message });
     }
   }
 };

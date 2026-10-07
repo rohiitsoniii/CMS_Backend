@@ -20,7 +20,9 @@ import {
   bulkOperations,
 } from '../controllers/contentController.js';
 import { ContentTypes } from '../models/index.js';
+import type { ContentType } from '../models/Content.js';
 import { authenticateJWT, requirePermission } from '../middleware/index.js';
+import { validate, mongoId, paginationQuery, searchQuery, body, param } from '../middleware/validate.js';
 
 const router = Router({ mergeParams: true });
 
@@ -32,63 +34,93 @@ router.use(authenticateJWT);
 // ============================
 
 // List all content for project
-router.get('/', getContentList);
+router.get('/', [...paginationQuery, searchQuery], validate, getContentList);
 
 // Create content
-router.post('/', requirePermission('content:write'), createContent);
+router.post(
+  '/',
+  requirePermission('content:write'),
+  [
+    body('type').isString().trim().notEmpty().isLength({ max: 100 }),
+    body('name').isString().trim().notEmpty().isLength({ max: 200 }),
+  ],
+  validate,
+  createContent
+);
 
 // Reorder content
-router.put('/reorder', requirePermission('content:write'), reorderContent);
+router.put(
+  '/reorder',
+  requirePermission('content:write'),
+  [body('order').isArray({ min: 1 }).withMessage('order must be a non-empty array')],
+  validate,
+  reorderContent
+);
 
 // Bulk operations
-router.post('/bulk', requirePermission('content:write'), bulkOperations);
+router.post(
+  '/bulk',
+  requirePermission('content:write'),
+  [
+    body('operation').isString().trim().notEmpty(),
+    body('ids').isArray({ min: 1 }).withMessage('ids must be a non-empty array'),
+  ],
+  validate,
+  bulkOperations
+);
 
 // Trash management
 router.get('/trash', getTrash);
 router.delete('/trash/empty', requirePermission('content:delete'), emptyTrash);
 
 // Get single content
-router.get('/:id', getContent);
+router.get('/:id', mongoId('id'), validate, getContent);
 
 // Update content
-router.put('/:id', requirePermission('content:write'), updateContent);
+router.put('/:id', requirePermission('content:write'), mongoId('id'), validate, updateContent);
 
 // Delete content
-router.delete('/:id', requirePermission('content:delete'), deleteContent);
+router.delete('/:id', requirePermission('content:delete'), mongoId('id'), validate, deleteContent);
 
 // Set as default
-router.post('/:id/default', requirePermission('content:write'), setContentAsDefault);
+router.post('/:id/default', requirePermission('content:write'), mongoId('id'), validate, setContentAsDefault);
 
 // Publish content
-router.post('/:id/publish', requirePermission('content:write'), publishContent);
+router.post('/:id/publish', requirePermission('content:write'), mongoId('id'), validate, publishContent);
 
 // Unpublish content
-router.post('/:id/unpublish', requirePermission('content:write'), unpublishContent);
+router.post('/:id/unpublish', requirePermission('content:write'), mongoId('id'), validate, unpublishContent);
 
 // Version history
-router.get('/:id/versions', getVersionHistory);
+router.get('/:id/versions', mongoId('id'), validate, getVersionHistory);
 
 // Restore version
-router.post('/:id/versions/:version/restore', requirePermission('content:write'), restoreVersion);
+router.post(
+  '/:id/versions/:version/restore',
+  requirePermission('content:write'),
+  [mongoId('id'), param('version').isInt({ min: 1 }).withMessage('Invalid version')],
+  validate,
+  restoreVersion
+);
 
 // Duplicate content
-router.post('/:id/duplicate', requirePermission('content:write'), duplicateContent);
+router.post('/:id/duplicate', requirePermission('content:write'), mongoId('id'), validate, duplicateContent);
 
 // Restore from trash
-router.post('/:id/restore', requirePermission('content:write'), restoreContent);
+router.post('/:id/restore', requirePermission('content:write'), mongoId('id'), validate, restoreContent);
 
 // Permanent delete
-router.delete('/:id/permanent', requirePermission('content:delete'), permanentDeleteContent);
+router.delete('/:id/permanent', requirePermission('content:delete'), mongoId('id'), validate, permanentDeleteContent);
 
 // ============================
 // Type-Specific Shorthand Routes
 // ============================
 
 // Create type-specific routers
-const createTypeRouter = (type: string) => {
+const createTypeRouter = (type: ContentType) => {
   const typeRouter = Router({ mergeParams: true });
   
-  typeRouter.get('/', getContentByType(type as keyof typeof ContentTypes));
+  typeRouter.get('/', getContentByType(type));
   
   return typeRouter;
 };

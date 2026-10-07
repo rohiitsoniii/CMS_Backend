@@ -1,18 +1,17 @@
 import express from 'express';
 import * as ragBotController from '../controllers/ragBotController.js';
 import * as ragIngestionController from '../controllers/ragIngestionController.js';
-import { protect, authorize } from '../middleware/authMiddleware.js';
+import { protect } from '../middleware/authMiddleware.js';
 import multer from 'multer';
-import path from 'path';
 
 const router = express.Router({ mergeParams: true });
 
 // Configure multer for temporary ingestion uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     cb(null, 'uploads/temp');
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     cb(null, `${Date.now()}-${file.originalname}`);
   }
 });

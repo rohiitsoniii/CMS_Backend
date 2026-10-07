@@ -347,7 +347,7 @@ class ReferencesService {
   private async checkDataForReference(data: any, contentId: string): Promise<boolean> {
     if (!data || typeof data !== 'object') return false;
 
-    for (const value of Object.values(data)) {
+    for (const value of Object.values(data) as any[]) {
       // Check if value is the contentId
       if (Types.ObjectId.isValid(value as any) && value.toString() === contentId) {
         return true;

@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { SupportTicket } from '../models/SupportTicket';
-import { EmailTemplate } from '../models/EmailTemplate';
 import nodemailer from 'nodemailer';
 
 export class SupportTicketController {
@@ -26,12 +25,12 @@ export class SupportTicketController {
                 .populate('assignedTo', 'name email')
                 .sort({ createdAt: -1 });
 
-            res.json({
+            return res.json({
                 success: true,
                 data: tickets,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch tickets',
                 error: error.message,
@@ -54,12 +53,12 @@ export class SupportTicketController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: ticket,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch ticket',
                 error: error.message,
@@ -114,13 +113,13 @@ export class SupportTicketController {
             // Notify staff
             await this.notifyStaff(ticket);
 
-            res.status(201).json({
+            return res.status(201).json({
                 success: true,
                 data: ticket,
                 message: 'Ticket created successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to create ticket',
                 error: error.message,
@@ -155,13 +154,13 @@ export class SupportTicketController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: ticket,
                 message: 'Ticket updated successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to update ticket',
                 error: error.message,
@@ -183,12 +182,12 @@ export class SupportTicketController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Ticket deleted successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to delete ticket',
                 error: error.message,
@@ -240,13 +239,13 @@ export class SupportTicketController {
                 await this.notifyStaff(ticket);
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: ticket,
                 message: 'Reply added successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to add reply',
                 error: error.message,
@@ -276,13 +275,13 @@ export class SupportTicketController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: ticket,
                 message: 'Ticket assigned successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to assign ticket',
                 error: error.message,
@@ -328,13 +327,13 @@ export class SupportTicketController {
                 await this.sendResolvedEmail(ticket);
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: ticket,
                 message: 'Status updated successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to update status',
                 error: error.message,
@@ -345,7 +344,7 @@ export class SupportTicketController {
     // Helper: Send confirmation email
     private async sendConfirmationEmail(ticket: any) {
         try {
-            const transporter = nodemailer.createTransporter({
+            const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
                 port: parseInt(process.env.SMTP_PORT || '587'),
                 secure: false,
@@ -382,7 +381,7 @@ export class SupportTicketController {
     // Helper: Notify customer
     private async notifyCustomer(ticket: any, message: string) {
         try {
-            const transporter = nodemailer.createTransporter({
+            const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
                 port: parseInt(process.env.SMTP_PORT || '587'),
                 secure: false,
@@ -414,7 +413,7 @@ export class SupportTicketController {
     // Helper: Send resolved email
     private async sendResolvedEmail(ticket: any) {
         try {
-            const transporter = nodemailer.createTransporter({
+            const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
                 port: parseInt(process.env.SMTP_PORT || '587'),
                 secure: false,

@@ -4,21 +4,21 @@
  * Handles AI-powered features via REST API
  */
 
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import aiService from '../services/aiService';
 import { asyncHandler } from '../middleware';
 
 /**
  * Generate blog post
  */
-export const generateBlogPost = asyncHandler(async (req: Request, res: Response) => {
+export const generateBlogPost = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { topic, keywords } = req.body;
 
   if (!topic) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Topic is required',
-    });
+    }); return;
   }
 
   const result = await aiService.generateBlogPost(topic, keywords);
@@ -32,14 +32,14 @@ export const generateBlogPost = asyncHandler(async (req: Request, res: Response)
 /**
  * Generate product description
  */
-export const generateProductDescription = asyncHandler(async (req: Request, res: Response) => {
+export const generateProductDescription = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { productName, features } = req.body;
 
   if (!productName || !features) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Product name and features are required',
-    });
+    }); return;
   }
 
   const description = await aiService.generateProductDescription(productName, features);
@@ -53,14 +53,14 @@ export const generateProductDescription = asyncHandler(async (req: Request, res:
 /**
  * Generate tags
  */
-export const generateTags = asyncHandler(async (req: Request, res: Response) => {
+export const generateTags = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { content, maxTags = 5 } = req.body;
 
   if (!content) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Content is required',
-    });
+    }); return;
   }
 
   const tags = await aiService.generateTags(content, maxTags);
@@ -74,14 +74,14 @@ export const generateTags = asyncHandler(async (req: Request, res: Response) => 
 /**
  * Generate SEO meta description
  */
-export const generateMetaDescription = asyncHandler(async (req: Request, res: Response) => {
+export const generateMetaDescription = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { title, content } = req.body;
 
   if (!title || !content) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Title and content are required',
-    });
+    }); return;
   }
 
   const metaDescription = await aiService.generateMetaDescription(title, content);
@@ -95,14 +95,14 @@ export const generateMetaDescription = asyncHandler(async (req: Request, res: Re
 /**
  * Generate SEO title
  */
-export const generateSEOTitle = asyncHandler(async (req: Request, res: Response) => {
+export const generateSEOTitle = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { content } = req.body;
 
   if (!content) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Content is required',
-    });
+    }); return;
   }
 
   const title = await aiService.generateSEOTitle(content);
@@ -116,14 +116,14 @@ export const generateSEOTitle = asyncHandler(async (req: Request, res: Response)
 /**
  * Generate image alt text
  */
-export const generateImageAltText = asyncHandler(async (req: Request, res: Response) => {
+export const generateImageAltText = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { imageName, context } = req.body;
 
   if (!imageName) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Image name is required',
-    });
+    }); return;
   }
 
   const altText = await aiService.generateImageAltText(imageName, context);
@@ -137,14 +137,14 @@ export const generateImageAltText = asyncHandler(async (req: Request, res: Respo
 /**
  * Translate content
  */
-export const translateContent = asyncHandler(async (req: Request, res: Response) => {
+export const translateContent = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { content, targetLanguage } = req.body;
 
   if (!content || !targetLanguage) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Content and target language are required',
-    });
+    }); return;
   }
 
   const translation = await aiService.translateContent(content, targetLanguage);
@@ -158,14 +158,14 @@ export const translateContent = asyncHandler(async (req: Request, res: Response)
 /**
  * Improve content
  */
-export const improveContent = asyncHandler(async (req: Request, res: Response) => {
+export const improveContent = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { content } = req.body;
 
   if (!content) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Content is required',
-    });
+    }); return;
   }
 
   const improvedContent = await aiService.improveContent(content);
@@ -179,14 +179,14 @@ export const improveContent = asyncHandler(async (req: Request, res: Response) =
 /**
  * Generate outline
  */
-export const generateOutline = asyncHandler(async (req: Request, res: Response) => {
+export const generateOutline = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { topic } = req.body;
 
   if (!topic) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Topic is required',
-    });
+    }); return;
   }
 
   const outline = await aiService.generateOutline(topic);
@@ -200,14 +200,14 @@ export const generateOutline = asyncHandler(async (req: Request, res: Response) 
 /**
  * Analyze sentiment
  */
-export const analyzeSentiment = asyncHandler(async (req: Request, res: Response) => {
+export const analyzeSentiment = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { content } = req.body;
 
   if (!content) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Content is required',
-    });
+    }); return;
   }
 
   const sentiment = await aiService.analyzeSentiment(content);
@@ -221,14 +221,14 @@ export const analyzeSentiment = asyncHandler(async (req: Request, res: Response)
 /**
  * Generate FAQ
  */
-export const generateFAQ = asyncHandler(async (req: Request, res: Response) => {
+export const generateFAQ = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { content, numQuestions = 5 } = req.body;
 
   if (!content) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Content is required',
-    });
+    }); return;
   }
 
   const faq = await aiService.generateFAQ(content, numQuestions);
@@ -242,14 +242,14 @@ export const generateFAQ = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Generate email
  */
-export const generateEmail = asyncHandler(async (req: Request, res: Response) => {
+export const generateEmail = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { topic, type = 'newsletter', context } = req.body;
 
   if (!topic) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Topic is required',
-    });
+    }); return;
   }
 
   const result = await aiService.generateEmail(topic, type, context);
@@ -263,14 +263,14 @@ export const generateEmail = asyncHandler(async (req: Request, res: Response) =>
 /**
  * Generate content type schema
  */
-export const generateSchema = asyncHandler(async (req: Request, res: Response) => {
+export const generateSchema = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { prompt } = req.body;
 
   if (!prompt) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Prompt is required',
-    });
+    }); return;
   }
 
   const fields = await aiService.generateSchema(prompt);
@@ -285,7 +285,7 @@ export const generateSchema = asyncHandler(async (req: Request, res: Response) =
 /**
  * Get AI service status
  */
-export const getAIStatus = asyncHandler(async (req: Request, res: Response) => {
+export const getAIStatus = asyncHandler(async (_req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const isConfigured = aiService.isConfigured();
   const availableModels = aiService.getAvailableModels();
 

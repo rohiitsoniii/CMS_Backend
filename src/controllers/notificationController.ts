@@ -1,9 +1,9 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { Notification } from '../models/Notification.js';
 import { asyncHandler } from '../middleware/index.js';
 
 export const notificationController = {
-  getNotifications: asyncHandler(async (req: Request, res: Response) => {
+  getNotifications: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     
@@ -41,7 +41,7 @@ export const notificationController = {
     });
   }),
 
-  markAsRead: asyncHandler(async (req: Request, res: Response) => {
+  markAsRead: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     const { id } = req.params;
     
     const notification = await Notification.findOneAndUpdate(
@@ -51,13 +51,13 @@ export const notificationController = {
     );
 
     if (!notification) {
-      return res.status(404).json({ success: false, message: 'Notification not found' });
+      res.status(404).json({ success: false, message: 'Notification not found' }); return;
     }
 
     res.json({ success: true, data: { notification } });
   }),
 
-  markAllAsRead: asyncHandler(async (req: Request, res: Response) => {
+  markAllAsRead: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     await Notification.updateMany(
         { userId: req.userId, tenantId: req.tenantId, isRead: false },
         { isRead: true }
@@ -65,7 +65,7 @@ export const notificationController = {
     res.json({ success: true });
   }),
 
-  clearAll: asyncHandler(async (req: Request, res: Response) => {
+  clearAll: asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
     await Notification.deleteMany({ userId: req.userId, tenantId: req.tenantId });
     res.json({ success: true });
   })

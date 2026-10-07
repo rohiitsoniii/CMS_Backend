@@ -37,7 +37,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     },
     // Force noopener noreferrer on external links
     transformTags: {
-        'a': (tagName: string, attribs: sanitizeHtml.Attribs) => {
+        'a': (tagName: string, attribs: Record<string, string>) => {
             if (attribs.href && attribs.href.startsWith('http')) {
                 return {
                     tagName,

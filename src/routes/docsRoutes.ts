@@ -4,13 +4,13 @@ import { generateOpenapiSpec } from '../utils/openapi.js';
 const router = express.Router();
 
 // Generate and return raw JSON spec
-router.get('/openapi.json', (req, res) => {
+router.get('/openapi.json', (_req, res) => {
     const spec = generateOpenapiSpec();
     res.json(spec);
 });
 
 // Render Scalar API HTML docs
-router.get('/', (req, res) => {
+router.get('/', (_req, res) => {
     res.send(`
     <!doctype html>
     <html>

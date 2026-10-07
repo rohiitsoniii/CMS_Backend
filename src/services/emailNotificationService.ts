@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { User } from '../models/User';
 import { Content } from '../models/Content';
-import { Workflow } from '../models/Workflow';
+import Workflow from '../models/Workflow';
 
 export class EmailNotificationService {
   private static transporter = nodemailer.createTransport({
@@ -28,7 +28,7 @@ export class EmailNotificationService {
       subject: `Approval Required: ${content.data?.title || 'Content'}`,
       html: `
         <h2>Content Approval Request</h2>
-        <p>Hi ${approver.name},</p>
+        <p>Hi ${(approver as any).fullName || approver.firstName || 'there'},</p>
         <p>You have been requested to approve the following content:</p>
         <ul>
           <li><strong>Title:</strong> ${content.data?.title || 'Untitled'}</li>
@@ -56,7 +56,7 @@ export class EmailNotificationService {
         subject: `Content Published: ${content.data?.title || 'Content'}`,
         html: `
           <h2>Content Published</h2>
-          <p>Hi ${user.name},</p>
+          <p>Hi ${(user as any).fullName || user.firstName || 'there'},</p>
           <p>The following content has been published:</p>
           <ul>
             <li><strong>Title:</strong> ${content.data?.title || 'Untitled'}</li>
@@ -143,7 +143,7 @@ export class EmailNotificationService {
       subject: 'Your Weekly Activity Digest',
       html: `
         <h2>Weekly Activity Digest</h2>
-        <p>Hi ${user.name},</p>
+        <p>Hi ${(user as any).fullName || user.firstName || 'there'},</p>
         <p>Here's a summary of your activity this week:</p>
         <ul>${activityList}</ul>
         <p><a href="${process.env.FRONTEND_URL}/dashboard">Go to Dashboard</a></p>

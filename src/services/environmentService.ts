@@ -101,7 +101,7 @@ class EnvironmentService {
     toEnvironmentId: string,
     options: PromoteOptions = {}
   ): Promise<SyncResult> {
-    const { contentIds, includeRelated = false, overwrite = false } = options;
+    const { contentIds, overwrite = false } = options;
 
     const result: SyncResult = {
       promoted: 0,

@@ -39,13 +39,13 @@ router.post(
 router.get(
   '/',
   requirePermission('content:read'),
-  contentController.getAllContent
+  contentController.getContentList
 );
 
 router.get(
   '/:id',
   requirePermission('content:read'),
-  contentController.getContentById
+  contentController.getContent
 );
 
 router.put(
@@ -78,13 +78,13 @@ router.post(
 router.get(
   '/:id/versions',
   requirePermission('content:read'),
-  contentController.getContentVersions
+  contentController.getVersionHistory
 );
 
 router.post(
   '/:id/versions/:version/restore',
   requirePermission('content:update'),
-  contentController.restoreContentVersion
+  contentController.restoreVersion
 );
 
 export default router;

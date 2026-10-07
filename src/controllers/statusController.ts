@@ -10,7 +10,7 @@ export const statusController = {
     
     // In a full implementation, this might fetch from an `Incident` collection
     // and historical `UptimeLog` collection.
-    res.json({
+    return res.json({
       success: true,
       data: {
         status: health.status === 'ok' ? 'operational' : 'degraded',

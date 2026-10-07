@@ -1,6 +1,7 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { RagBot, RagConversation, Knowledge } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
+import { isOriginAllowed } from '../middleware/apiKeyAuth.js';
 import mongoose from 'mongoose';
 import { ragQueryService } from '../services/ragQueryService.js';
 
@@ -9,11 +10,12 @@ import { ragQueryService } from '../services/ragQueryService.js';
  * Handles interactions from the embeddable widget
  */
 
-export const getWidgetConfig = asyncHandler(async (req: Request, res: Response) => {
+export const getWidgetConfig = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { botSlug } = req.params;
-  const { apiKey } = req.query;
-  
-  if (!apiKey) {
+  // Prefer the x-bot-key header so keys stay out of URLs/logs; ?apiKey= kept for old embeds
+  const apiKey = (req.headers['x-bot-key'] as string) || req.query.apiKey;
+
+  if (!apiKey || typeof apiKey !== 'string') {
     throw new AppError('apiKey is required', 400);
   }
 
@@ -36,11 +38,8 @@ export const getWidgetConfig = asyncHandler(async (req: Request, res: Response) 
 
   // Validate CORS (Origin check) - optional for config fetch but good for security
   const origin = req.get('origin');
-  if (origin && bot.allowedOrigins?.length > 0) {
-    const isAllowed = bot.allowedOrigins.some(ao => origin.includes(ao));
-    if (!isAllowed) {
-      throw new AppError('Origin not allowed', 403);
-    }
+  if (origin && bot.allowedOrigins?.length > 0 && !isOriginAllowed(origin, bot.allowedOrigins)) {
+    throw new AppError('Origin not allowed', 403);
   }
   
   res.json({
@@ -49,11 +48,12 @@ export const getWidgetConfig = asyncHandler(async (req: Request, res: Response) 
   });
 });
 
-export const ragChat = asyncHandler(async (req: Request, res: Response) => {
+export const ragChat = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { botSlug } = req.params;
-  const { message, sessionId, apiKey, history = [] } = req.body;
-  
-  if (!message || !sessionId || !apiKey) {
+  const { message, sessionId, history = [] } = req.body;
+  const apiKey = (req.headers['x-bot-key'] as string) || req.body.apiKey;
+
+  if (!message || !sessionId || !apiKey || typeof apiKey !== 'string') {
     throw new AppError('message, sessionId, and apiKey are required', 400);
   }
   
@@ -75,11 +75,8 @@ export const ragChat = asyncHandler(async (req: Request, res: Response) => {
   
   // Validate CORS (Origin check)
   const origin = req.get('origin');
-  if (origin && bot.allowedOrigins?.length > 0) {
-    const isAllowed = bot.allowedOrigins.some(ao => origin.includes(ao));
-    if (!isAllowed) {
-      throw new AppError('Origin not allowed', 403);
-    }
+  if (origin && bot.allowedOrigins?.length > 0 && !isOriginAllowed(origin, bot.allowedOrigins)) {
+    throw new AppError('Origin not allowed', 403);
   }
   
   // Process RAG Query
@@ -100,8 +97,7 @@ export const ragChat = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const submitFeedback = asyncHandler(async (req: Request, res: Response) => {
-  const { botSlug } = req.params;
+export const submitFeedback = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { sessionId, messageIndex, feedback } = req.body; // feedback: 'helpful' | 'not_helpful'
   
   if (!sessionId || messageIndex === undefined || !feedback) {

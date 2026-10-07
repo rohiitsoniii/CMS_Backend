@@ -56,7 +56,9 @@ export interface ITenant extends Document {
   emailVerificationToken?: string;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
-  lastLoginAt?: Date;
+  /** SHA-256 hex hash of the per-tenant SCIM bearer token (raw token is never stored). */
+  scimToken?: string;
+  scimEnabled?: boolean;
   lastLoginAt?: Date;
   onboarding: {
     projectCreated: boolean;
@@ -183,6 +185,8 @@ const tenantSchema = new Schema<ITenant>({
   emailVerificationToken: String,
   passwordResetToken: String,
   passwordResetExpires: Date,
+  scimToken: { type: String, select: false },
+  scimEnabled: { type: Boolean, default: false },
   lastLoginAt: Date,
   onboarding: {
     projectCreated: { type: Boolean, default: false },

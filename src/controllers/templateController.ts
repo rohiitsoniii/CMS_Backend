@@ -5,12 +5,12 @@ export const templateController = {
   /**
    * Get all available templates
    */
-  async getTemplates(req: Request, res: Response) {
+  async getTemplates(_req: Request, res: Response) {
     try {
       const templates = TemplateService.getTemplates();
-      res.json(templates);
+      return res.json(templates);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -35,12 +35,12 @@ export const templateController = {
         String(userId)
       );
 
-      res.json({
+      return res.json({
         message: 'Template applied successfully',
         contentTypesCreated: results.length
       });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

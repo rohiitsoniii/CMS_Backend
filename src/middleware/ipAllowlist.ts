@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler.js';
 import { logger } from '../utils/logger.js';
 
-export const ipAllowlist = (req: Request, res: Response, next: NextFunction): void => {
+export const ipAllowlist = (req: Request, _res: Response, next: NextFunction): void => {
   if (!req.tenant) {
     return next();
   }

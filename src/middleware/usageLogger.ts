@@ -15,7 +15,8 @@ export const usageLogger = (
   const originalEnd = res.end;
   
   // Override end function to capture response
-  res.end = function(chunk?: unknown, encoding?: BufferEncoding | (() => void), callback?: () => void): Response {
+  const originalEndTyped = originalEnd as unknown as (...args: any[]) => Response;
+  res.end = function(chunk?: any, encoding?: any, callback?: any): Response {
     const responseTime = Date.now() - startTime;
     
     // Only log if we have tenant info
@@ -50,9 +51,9 @@ export const usageLogger = (
     
     // Call original end
     if (typeof encoding === 'function') {
-      return originalEnd.call(this, chunk, encoding);
+      return originalEndTyped.call(this, chunk, encoding);
     }
-    return originalEnd.call(this, chunk, encoding, callback);
+    return originalEndTyped.call(this, chunk, encoding, callback);
   };
   
   next();

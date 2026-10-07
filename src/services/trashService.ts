@@ -1,8 +1,7 @@
 import { Trash } from '../models/Trash';
 import { Content } from '../models/Content';
 import { MediaFile } from '../models/MediaFile';
-import { ContentType } from '../models/ContentType';
-import mongoose from 'mongoose';
+import ContentType from '../models/ContentType';
 
 export class TrashService {
   // Move item to trash (soft delete)

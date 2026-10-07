@@ -4,14 +4,14 @@
  * Handles content references and backlinks endpoints
  */
 
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../middleware';
 import referencesService from '../services/referencesService';
 
 /**
  * Get references from a content item
  */
-export const getReferences = asyncHandler(async (req: Request, res: Response) => {
+export const getReferences = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { id } = req.params;
 
   const references = await referencesService.getReferences(id);
@@ -25,7 +25,7 @@ export const getReferences = asyncHandler(async (req: Request, res: Response) =>
 /**
  * Get backlinks to a content item
  */
-export const getBacklinks = asyncHandler(async (req: Request, res: Response) => {
+export const getBacklinks = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { id } = req.params;
 
   const backlinks = await referencesService.getBacklinks(id);
@@ -39,7 +39,7 @@ export const getBacklinks = asyncHandler(async (req: Request, res: Response) => 
 /**
  * Check if content can be deleted
  */
-export const checkCanDelete = asyncHandler(async (req: Request, res: Response) => {
+export const checkCanDelete = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { id } = req.params;
 
   const result = await referencesService.canDelete(id);
@@ -53,7 +53,7 @@ export const checkCanDelete = asyncHandler(async (req: Request, res: Response) =
 /**
  * Get reference graph
  */
-export const getReferenceGraph = asyncHandler(async (req: Request, res: Response) => {
+export const getReferenceGraph = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const { depth = 2 } = req.query;
 
@@ -68,7 +68,7 @@ export const getReferenceGraph = asyncHandler(async (req: Request, res: Response
 /**
  * Validate references
  */
-export const validateReferences = asyncHandler(async (req: Request, res: Response) => {
+export const validateReferences = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { id } = req.params;
 
   const result = await referencesService.validateReferences(id);
@@ -82,7 +82,7 @@ export const validateReferences = asyncHandler(async (req: Request, res: Respons
 /**
  * Fix broken references
  */
-export const fixBrokenReferences = asyncHandler(async (req: Request, res: Response) => {
+export const fixBrokenReferences = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { id } = req.params;
 
   const fixed = await referencesService.fixBrokenReferences(id);
@@ -97,7 +97,7 @@ export const fixBrokenReferences = asyncHandler(async (req: Request, res: Respon
 /**
  * Get usage statistics
  */
-export const getUsageStats = asyncHandler(async (req: Request, res: Response) => {
+export const getUsageStats = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { id } = req.params;
 
   const stats = await referencesService.getUsageStats(id);

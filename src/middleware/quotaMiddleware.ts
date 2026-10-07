@@ -1,119 +1,128 @@
 import { Request, Response, NextFunction } from 'express';
 import { Subscription } from '../models/Subscription';
-import { Plan } from '../models/Plan';
 import { Project } from '../models/Project';
 import { Content } from '../models/Content';
-import { TeamMember } from '../models/TeamMember';
+import { TeamMember } from '../models/TeamMember.js';
 
 export class QuotaMiddleware {
   // Check if tenant can create project
-  static async checkProjectQuota(req: Request, res: Response, next: NextFunction) {
+  static async checkProjectQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      
+
       const subscription = await Subscription.findOne({ tenantId }).populate('planId');
       if (!subscription) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'No active subscription',
           message: 'Please subscribe to a plan to create projects',
           upgradeUrl: '/billing/plans'
         });
+        return;
       }
 
       const plan = subscription.planId as any;
       const currentProjects = await Project.countDocuments({ tenantId });
 
       if (currentProjects >= plan.limits.projects) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'Project limit reached',
           message: `Your plan allows ${plan.limits.projects} projects. Upgrade to create more.`,
           current: currentProjects,
           limit: plan.limits.projects,
           upgradeUrl: '/billing/upgrade'
         });
+        return;
       }
 
-      next();
+      return next();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+      return;
     }
   }
 
   // Check if tenant can create content
-  static async checkContentQuota(req: Request, res: Response, next: NextFunction) {
+  static async checkContentQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      
+
       const subscription = await Subscription.findOne({ tenantId }).populate('planId');
       if (!subscription) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'No active subscription',
           upgradeUrl: '/billing/plans'
         });
+        return;
       }
 
       const plan = subscription.planId as any;
       const currentContent = await Content.countDocuments({ tenantId });
 
       if (currentContent >= plan.limits.contentItems) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'Content limit reached',
           message: `Your plan allows ${plan.limits.contentItems} content items. Upgrade to create more.`,
           current: currentContent,
           limit: plan.limits.contentItems,
           upgradeUrl: '/billing/upgrade'
         });
+        return;
       }
 
-      next();
+      return next();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+      return;
     }
   }
 
   // Check if tenant can invite team member
-  static async checkTeamMemberQuota(req: Request, res: Response, next: NextFunction) {
+  static async checkTeamMemberQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      
+
       const subscription = await Subscription.findOne({ tenantId }).populate('planId');
       if (!subscription) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'No active subscription',
           upgradeUrl: '/billing/plans'
         });
+        return;
       }
 
       const plan = subscription.planId as any;
       const currentMembers = await TeamMember.countDocuments({ tenantId });
 
       if (currentMembers >= plan.limits.teamMembers) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'Team member limit reached',
           message: `Your plan allows ${plan.limits.teamMembers} team members. Upgrade to add more.`,
           current: currentMembers,
           limit: plan.limits.teamMembers,
           upgradeUrl: '/billing/upgrade'
         });
+        return;
       }
 
-      next();
+      return next();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+      return;
     }
   }
 
   // Check storage quota
-  static async checkStorageQuota(req: Request, res: Response, next: NextFunction) {
+  static async checkStorageQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      
+
       const subscription = await Subscription.findOne({ tenantId }).populate('planId');
       if (!subscription) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'No active subscription',
           upgradeUrl: '/billing/plans'
         });
+        return;
       }
 
       const plan = subscription.planId as any;
@@ -122,65 +131,74 @@ export class QuotaMiddleware {
       const maxStorage = plan.limits.storage * 1024 * 1024 * 1024; // Convert GB to bytes
 
       if (currentStorage + fileSize > maxStorage) {
-        return res.status(403).json({
+        res.status(403).json({
           error: 'Storage limit reached',
           message: `Your plan allows ${plan.limits.storage}GB storage. Upgrade for more space.`,
           current: (currentStorage / (1024 * 1024 * 1024)).toFixed(2) + 'GB',
           limit: plan.limits.storage + 'GB',
           upgradeUrl: '/billing/upgrade'
         });
+        return;
       }
 
-      next();
+      return next();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+      return;
     }
   }
 
   // Check API rate limit
-  static async checkAPIRateLimit(req: Request, res: Response, next: NextFunction) {
+  static async checkAPIRateLimit(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const tenantId = req.user?.tenantId || req.headers['x-tenant-id'] as string;
-      if (!tenantId) return next();
-      
+      if (!tenantId) {
+        return next();
+      }
+
       const subscription = await Subscription.findOne({ tenantId }).populate('planId');
-      if (!subscription) return next();
+      if (!subscription) {
+        return next();
+      }
 
       const plan = subscription.planId as any;
-      
+
       // Check monthly API calls
       if (subscription.usage.apiCallsThisMonth >= plan.limits.apiCallsPerMonth) {
-        return res.status(429).json({
+        res.status(429).json({
           error: 'API call limit reached',
           message: `Your plan allows ${plan.limits.apiCallsPerMonth} API calls per month. Upgrade for more.`,
           current: subscription.usage.apiCallsThisMonth,
           limit: plan.limits.apiCallsPerMonth,
           upgradeUrl: '/billing/upgrade'
         });
+        return;
       }
 
       // Increment API call count
       subscription.usage.apiCallsThisMonth += 1;
       await subscription.save();
 
-      next();
+      return next();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+      return;
     }
   }
 
   // Get quota status
-  static async getQuotaStatus(req: Request, res: Response) {
+  static async getQuotaStatus(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user!.tenantId;
-      
+
       const subscription = await Subscription.findOne({ tenantId }).populate('planId');
       if (!subscription) {
-        return res.status(404).json({ error: 'No subscription found' });
+        res.status(404).json({ error: 'No subscription found' });
+        return;
       }
 
       const plan = subscription.planId as any;
-      
+
       const [projectCount, contentCount, teamMemberCount] = await Promise.all([
         Project.countDocuments({ tenantId }),
         Content.countDocuments({ tenantId }),
@@ -221,8 +239,10 @@ export class QuotaMiddleware {
       };
 
       res.json(quotaStatus);
+      return;
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+      return;
     }
   }
 }

@@ -179,7 +179,6 @@ export const chatWithBot = asyncHandler(async (req: Request, res: Response): Pro
  */
 export const getChatSuggestions = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { projectSlug } = req.params;
-  
   const project = await Project.findOne({
     slug: projectSlug,
     status: 'active',
@@ -214,7 +213,6 @@ export const getChatSuggestions = asyncHandler(async (req: Request, res: Respons
  * POST /api/v1/deliver/:projectSlug/chat/rate
  */
 export const rateChatResponse = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { projectSlug } = req.params;
   const { knowledgeId, helpful } = req.body;
   
   if (!knowledgeId || typeof helpful !== 'boolean') {

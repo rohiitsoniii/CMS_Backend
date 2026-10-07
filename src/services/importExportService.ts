@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { Content, ContentType } from '../models/index.js';
+import { Content } from '../models/index.js';
 import { Parser } from 'json2csv';
 
 interface ImportOptions {

@@ -6,9 +6,9 @@ export const deploymentController = {
     try {
       const { projectId } = req.params;
       const integrations = await DeploymentService.getIntegrations(String(req.user!.tenantId), projectId);
-      res.json(integrations);
+      return res.json(integrations);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -16,9 +16,9 @@ export const deploymentController = {
     try {
       const { projectId } = req.params;
       const integration = await DeploymentService.createIntegration(String(req.user!.tenantId), projectId, req.body);
-      res.json(integration);
+      return res.json(integration);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -26,9 +26,9 @@ export const deploymentController = {
     try {
       const { id } = req.params;
       const result = await DeploymentService.triggerDeploy(String(req.user!.tenantId), id);
-      res.json(result);
+      return res.json(result);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -36,9 +36,9 @@ export const deploymentController = {
     try {
       const { id } = req.params;
       await DeploymentService.deleteIntegration(String(req.user!.tenantId), id);
-      res.json({ success: true, message: 'Integration deleted' });
+      return res.json({ success: true, message: 'Integration deleted' });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

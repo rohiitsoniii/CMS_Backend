@@ -24,7 +24,7 @@ export class TwoFactorService {
       issuer: 'Headless CMS'
     });
 
-    const qrCodeUrl = await QRCode.toDataURL(secret.otpauthURL || '');
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url || '');
 
     const backupCodes = Array.from({ length: 10 }, () => 
       crypto.randomBytes(4).toString('hex').toUpperCase()
@@ -53,14 +53,14 @@ export class TwoFactorService {
     const twoFactor = await TwoFactorAuth.findOne({ userId: new mongoose.Types.ObjectId(userId) });
     if (!twoFactor) throw new Error('2FA not set up for this user');
 
-    const verified = speakeasy.totp({
+    const verified = speakeasy.totp.verify({
       secret: twoFactor.secret,
       encoding: 'base32',
       token,
       window: 1
     });
 
-    if (verified !== token) {
+    if (!verified) {
       const isBackupCode = twoFactor.backupCodes.includes(token.toUpperCase());
       if (!isBackupCode) {
         throw new Error('Invalid verification code');
@@ -88,14 +88,14 @@ export class TwoFactorService {
     
     if (!twoFactor) return false;
 
-    const verified = speakeasy.totp({
+    const verified = speakeasy.totp.verify({
       secret: twoFactor.secret,
       encoding: 'base32',
       token,
       window: 1
     });
 
-    if (verified === token) return true;
+    if (verified) return true;
 
     if (twoFactor.backupCodes.includes(token.toUpperCase())) {
       await this.useBackupCode(userId, token.toUpperCase());
@@ -120,14 +120,14 @@ export class TwoFactorService {
     
     if (!twoFactor) throw new Error('2FA is not enabled');
 
-    const verified = speakeasy.totp({
+    const verified = speakeasy.totp.verify({
       secret: twoFactor.secret,
       encoding: 'base32',
       token,
       window: 1
     });
 
-    if (verified !== token && !twoFactor.backupCodes.includes(token.toUpperCase())) {
+    if (!verified && !twoFactor.backupCodes.includes(token.toUpperCase())) {
       throw new Error('Invalid verification code');
     }
 

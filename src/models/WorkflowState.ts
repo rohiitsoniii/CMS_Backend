@@ -152,12 +152,12 @@ WorkflowStateSchema.methods.addAction = function(action: IWorkflowAction) {
   this.history.push(action);
 };
 
-WorkflowStateSchema.methods.isAssignedTo = function(userId: mongoose.Types.ObjectId): boolean {
+WorkflowStateSchema.methods.isAssignedTo = function(this: any, userId: mongoose.Types.ObjectId): boolean {
   if (!this.assignedTo || this.assignedTo.length === 0) {
     return true; // No specific assignment
   }
-  
-  return this.assignedTo.some(id => id.toString() === userId.toString());
+
+  return this.assignedTo.some((id: any) => id.toString() === userId.toString());
 };
 
 WorkflowStateSchema.methods.complete = function() {

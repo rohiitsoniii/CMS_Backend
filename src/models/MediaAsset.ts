@@ -296,17 +296,17 @@ MediaAssetSchema.index({
 });
 
 // Methods
-MediaAssetSchema.methods.getTransformation = function(name: string): IImageTransformation | undefined {
-  return this.transformations?.find(t => t.name === name);
+MediaAssetSchema.methods.getTransformation = function(this: any, name: string): IImageTransformation | undefined {
+  return this.transformations?.find((t: IImageTransformation) => t.name === name);
 };
 
-MediaAssetSchema.methods.addTransformation = function(transformation: IImageTransformation) {
+MediaAssetSchema.methods.addTransformation = function(this: any, transformation: IImageTransformation) {
   if (!this.transformations) {
     this.transformations = [];
   }
-  
+
   // Remove existing transformation with same name
-  this.transformations = this.transformations.filter(t => t.name !== transformation.name);
+  this.transformations = this.transformations.filter((t: IImageTransformation) => t.name !== transformation.name);
   
   // Add new transformation
   this.transformations.push(transformation);
@@ -317,10 +317,10 @@ MediaAssetSchema.methods.incrementUsage = function() {
   this.lastUsedAt = new Date();
 };
 
-MediaAssetSchema.methods.trackUsage = function(contentId: mongoose.Types.ObjectId, contentType: string, field: string) {
+MediaAssetSchema.methods.trackUsage = function(this: any, contentId: mongoose.Types.ObjectId, contentType: string, field: string) {
   // Check if already tracked
   const exists = this.usedIn.some(
-    u => u.contentId.toString() === contentId.toString() && u.field === field
+    (u: { contentId: mongoose.Types.ObjectId; field: string }) => u.contentId.toString() === contentId.toString() && u.field === field
   );
   
   if (!exists) {
@@ -329,9 +329,9 @@ MediaAssetSchema.methods.trackUsage = function(contentId: mongoose.Types.ObjectI
   }
 };
 
-MediaAssetSchema.methods.removeUsage = function(contentId: mongoose.Types.ObjectId, field: string) {
+MediaAssetSchema.methods.removeUsage = function(this: any, contentId: mongoose.Types.ObjectId, field: string) {
   this.usedIn = this.usedIn.filter(
-    u => !(u.contentId.toString() === contentId.toString() && u.field === field)
+    (u: { contentId: mongoose.Types.ObjectId; field: string }) => !(u.contentId.toString() === contentId.toString() && u.field === field)
   );
   
   if (this.usageCount > 0) {

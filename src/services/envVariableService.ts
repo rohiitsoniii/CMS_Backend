@@ -116,7 +116,7 @@ export class EnvVariableService {
   static async getVariablesForProject(
     projectId: string,
     environment: string = 'all'
-  ): Promise<any[]> {
+  ): Promise<Record<string, string>> {
     const variables = await EnvVariable.find({
       $or: [
         { projectId: new mongoose.Types.ObjectId(projectId), environment: { $in: [environment, 'all'] } },

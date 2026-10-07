@@ -79,6 +79,7 @@ export interface IContent extends Document {
   
   // Status & visibility
   status: ContentStatus;
+  publishedAt?: Date;
   isDefault: boolean;
   visibility: 'public' | 'private' | 'password';
   password?: string;
@@ -346,6 +347,21 @@ ContentSchema.index({ projectId: 1, type: 1, 'meta.category': 1 });
 ContentSchema.index({ projectId: 1, type: 1, 'meta.tags': 1 });
 ContentSchema.index({ projectId: 1, status: 1, 'meta.publishedAt': -1 });
 
+// Virtual mapping for publishedAt to meta.publishedAt
+ContentSchema.virtual('publishedAt')
+  .get(function () {
+    return this.meta?.publishedAt;
+  })
+  .set(function (this: any, val: Date) {
+    if (!this.meta) {
+      this.meta = {};
+    }
+    this.meta.publishedAt = val;
+  });
+
+ContentSchema.set('toJSON', { virtuals: true });
+ContentSchema.set('toObject', { virtuals: true });
+
 // Pre-save middleware
 ContentSchema.pre('save', async function (next) {
   // ── XSS Protection ──────────────────────────────────────────────────────────
@@ -440,6 +456,11 @@ ContentSchema.methods.saveVersion = async function(
   changedBy: Types.ObjectId,
   changeNote?: string
 ): Promise<void> {
+  // versionHistory is select:false — docs loaded without it (e.g. update
+  // flows) would otherwise throw on push. Treat missing as empty.
+  if (!Array.isArray(this.versionHistory)) {
+    this.versionHistory = [];
+  }
   this.versionHistory.push({
     version: this.version,
     data: this.data,
@@ -459,20 +480,20 @@ ContentSchema.methods.saveVersion = async function(
 };
 
 // Instance method to populate relationships
-ContentSchema.methods.populateRelationships = async function(): Promise<IContent> {
+ContentSchema.methods.populateRelationships = async function(this: any): Promise<IContent> {
   if (!this.relationships || Object.keys(this.relationships).length === 0) {
-    return this;
+    return this as IContent;
   }
 
   const populated = await this.populate(
-    Object.keys(this.relationships).map(fieldName => ({
+    Object.keys(this.relationships).map((fieldName: string) => ({
       path: `relationships.${fieldName}`,
       model: 'Content',
       select: '_id name slug type status data',
     }))
   );
 
-  return populated;
+  return populated as IContent;
 };
 
 export const Content = mongoose.model<IContent>('Content', ContentSchema);

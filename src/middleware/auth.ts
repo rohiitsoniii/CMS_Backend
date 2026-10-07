@@ -21,6 +21,7 @@ interface JwtPayload {
   role: string;
   type: 'access' | 'refresh';
   mfaVerified?: boolean;
+  v?: number;
   iat: number;
   exp: number;
 }
@@ -36,8 +37,13 @@ export const authenticateJWT = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+    // Bearer header first, httpOnly cookie second (browsers)
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : (req.cookies?.accessToken as string | undefined);
+
+    if (!token) {
       res.status(401).json({
         success: false,
         error: 'Authentication required',
@@ -45,8 +51,6 @@ export const authenticateJWT = async (
       });
       return;
     }
-    
-    const token = authHeader.split(' ')[1];
     
     try {
       const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
@@ -62,11 +66,21 @@ export const authenticateJWT = async (
       
       // Get user
       const user = await User.findById(decoded.userId);
-      
+
       if (!user || !user.isActive) {
         res.status(401).json({
           success: false,
           error: 'User not found or inactive',
+        });
+        return;
+      }
+
+      // Reject tokens issued before logout/password change
+      if (decoded.v !== undefined && decoded.v !== (user.tokenVersion || 0)) {
+        res.status(401).json({
+          success: false,
+          error: 'Session revoked',
+          message: 'Please sign in again',
         });
         return;
       }
@@ -138,6 +152,111 @@ export const authenticateJWT = async (
 export const authenticate = authenticateJWT;
 
 /**
+ * Middleware for MFA verification step: authenticates a valid access token
+ * WITHOUT enforcing the mfaVerified flag, so a pre-MFA (mfaVerified=false)
+ * temporary token can call POST /two-factor/verify and nothing else.
+ * All other routes must keep using authenticateJWT.
+ */
+export const authenticateAllowUnverifiedMfa = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : (req.cookies?.accessToken as string | undefined);
+
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+        message: 'No token provided',
+      });
+      return;
+    }
+
+    try {
+      const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
+
+      if (decoded.type !== 'access') {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid token type',
+          message: 'Access token required',
+        });
+        return;
+      }
+
+      const user = await User.findById(decoded.userId);
+
+      if (!user || !user.isActive) {
+        res.status(401).json({
+          success: false,
+          error: 'User not found or inactive',
+        });
+        return;
+      }
+
+      if (decoded.v !== undefined && decoded.v !== (user.tokenVersion || 0)) {
+        res.status(401).json({
+          success: false,
+          error: 'Session revoked',
+          message: 'Please sign in again',
+        });
+        return;
+      }
+
+      let tenant = null;
+      if (decoded.tenantId) {
+        tenant = await Tenant.findById(decoded.tenantId);
+
+        if (!tenant || !tenant.isActive) {
+          if (!user.isSuperAdmin) {
+            res.status(401).json({
+              success: false,
+              error: 'Tenant not found or inactive',
+            });
+            return;
+          }
+        }
+      } else if (!user.isSuperAdmin) {
+        res.status(401).json({
+          success: false,
+          error: 'Missing tenant context',
+        });
+        return;
+      }
+
+      req.user = user;
+      req.tenant = tenant as any;
+      req.userId = decoded.userId;
+      req.tenantId = decoded.tenantId;
+
+      next();
+    } catch (jwtError) {
+      if (jwtError instanceof jwt.TokenExpiredError) {
+        res.status(401).json({
+          success: false,
+          error: 'Token expired',
+          message: 'Please refresh your token',
+        });
+        return;
+      }
+
+      res.status(401).json({
+        success: false,
+        error: 'Invalid token',
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Middleware for tenant owner authentication (initial login)
  */
 export const authenticateTenant = async (
@@ -187,21 +306,22 @@ export const authenticateTenant = async (
 };
 
 /**
- * Generate JWT tokens
+ * Generate JWT tokens. tokenVersion binds tokens to the user's current
+ * session generation — bumped on logout/password change to revoke all.
  */
-export const generateTokens = (userId: string, tenantId: string, role: string, mfaVerified: boolean = false) => {
+export const generateTokens = (userId: string, tenantId: string, role: string, mfaVerified: boolean = false, tokenVersion = 0) => {
   const accessToken = jwt.sign(
-    { userId, tenantId, role, mfaVerified, type: 'access' },
+    { userId, tenantId, role, mfaVerified, v: tokenVersion, type: 'access' },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn as any }
   );
-  
+
   const refreshToken = jwt.sign(
-    { userId, tenantId, role, mfaVerified, type: 'refresh' },
+    { userId, tenantId, role, mfaVerified, v: tokenVersion, type: 'refresh' },
     config.jwt.refreshSecret,
     { expiresIn: config.jwt.refreshExpiresIn as any }
   );
-  
+
   return { accessToken, refreshToken };
 };
 
@@ -223,9 +343,14 @@ export const refreshTokens = async (
     if (!user || !user.isActive) {
       return null;
     }
-    
-    // Generate new tokens (carry over MFA verification state)
-    return generateTokens(decoded.userId, decoded.tenantId || user.tenantId.toString(), decoded.role, decoded.mfaVerified);
+
+    // Reject refresh tokens from a revoked session generation
+    if (decoded.v !== undefined && decoded.v !== (user.tokenVersion || 0)) {
+      return null;
+    }
+
+    // Generate new tokens (carry over MFA verification state + version)
+    return generateTokens(decoded.userId, decoded.tenantId || user.tenantId.toString(), decoded.role, decoded.mfaVerified, user.tokenVersion || 0);
   } catch {
     return null;
   }

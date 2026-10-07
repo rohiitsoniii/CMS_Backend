@@ -1,4 +1,4 @@
-import { IFieldDefinition, FieldTypes, ValidationResult, ValidationErrorType } from '../types/fieldTypes';
+import { IFieldDefinition, FieldTypes, ValidationResult } from '../types/fieldTypes';
 
 /**
  * Field Validation Utilities
@@ -11,8 +11,8 @@ import { IFieldDefinition, FieldTypes, ValidationResult, ValidationErrorType } f
 export const validateField = async (
   field: IFieldDefinition,
   value: any,
-  locale?: string,
-  context?: { tenantId: string; contentTypeId?: string }
+  _locale?: string,
+  _context?: { tenantId: string; contentTypeId?: string }
 ): Promise<ValidationResult> => {
   const errors: string[] = [];
 

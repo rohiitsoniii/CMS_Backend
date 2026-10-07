@@ -1,5 +1,8 @@
 import { Plan } from '../models/Plan';
 import { connectDatabase } from '../config/database';
+import { assertScriptSafe } from './guards.js';
+
+assertScriptSafe({ scriptName: 'seedPlans', destructive: true });
 
 const defaultPlans = [
   {

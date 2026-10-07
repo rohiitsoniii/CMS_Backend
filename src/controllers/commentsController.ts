@@ -18,9 +18,9 @@ export const commentsController = {
         parentId
       });
 
-      res.json(comment);
+      return res.json(comment);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -34,9 +34,9 @@ export const commentsController = {
         includeResolved: includeResolved === 'true'
       });
 
-      res.json(comments);
+      return res.json(comments);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -45,9 +45,9 @@ export const commentsController = {
     try {
       const { contentId } = req.params;
       const threads = await CommentsService.getCommentThreads(contentId);
-      res.json(threads);
+      return res.json(threads);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -58,9 +58,9 @@ export const commentsController = {
       const { content } = req.body;
 
       const updated = await CommentsService.updateComment(commentId, content);
-      res.json(updated);
+      return res.json(updated);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -69,9 +69,9 @@ export const commentsController = {
     try {
       const { commentId } = req.params;
       await CommentsService.deleteComment(commentId);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -82,9 +82,9 @@ export const commentsController = {
       const userId = req.user!.id;
 
       const resolved = await CommentsService.resolveComment(commentId, userId);
-      res.json(resolved);
+      return res.json(resolved);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -93,9 +93,9 @@ export const commentsController = {
     try {
       const { commentId } = req.params;
       const unresolved = await CommentsService.unresolveComment(commentId);
-      res.json(unresolved);
+      return res.json(unresolved);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -104,9 +104,9 @@ export const commentsController = {
     try {
       const { contentId, fieldPath } = req.params;
       const comments = await CommentsService.getCommentsByField(contentId, fieldPath);
-      res.json(comments);
+      return res.json(comments);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -115,9 +115,9 @@ export const commentsController = {
     try {
       const { contentId } = req.params;
       const count = await CommentsService.getUnresolvedCount(contentId);
-      res.json({ count });
+      return res.json({ count });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

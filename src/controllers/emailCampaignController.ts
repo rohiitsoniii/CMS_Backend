@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { EmailCampaign } from '../models/EmailCampaign';
 import { CampaignRecipient } from '../models/CampaignRecipient';
 import { EmailSubscriber } from '../models/EmailSubscriber';
-import { EmailTemplate } from '../models/EmailTemplate';
 import nodemailer from 'nodemailer';
 
 export class EmailCampaignController {
@@ -26,12 +25,12 @@ export class EmailCampaignController {
                 .populate('templateId', 'name')
                 .sort({ createdAt: -1 });
 
-            res.json({
+            return res.json({
                 success: true,
                 data: campaigns,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch campaigns',
                 error: error.message,
@@ -55,12 +54,12 @@ export class EmailCampaignController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: campaign,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch campaign',
                 error: error.message,
@@ -125,13 +124,13 @@ export class EmailCampaignController {
                 createdBy: userId,
             });
 
-            res.status(201).json({
+            return res.status(201).json({
                 success: true,
                 data: campaign,
                 message: 'Campaign created successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to create campaign',
                 error: error.message,
@@ -167,13 +166,13 @@ export class EmailCampaignController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: campaign,
                 message: 'Campaign updated successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to update campaign',
                 error: error.message,
@@ -198,12 +197,12 @@ export class EmailCampaignController {
             // Delete associated recipients
             await CampaignRecipient.deleteMany({ campaignId: id });
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Campaign deleted successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to delete campaign',
                 error: error.message,
@@ -263,7 +262,7 @@ export class EmailCampaignController {
             // Send emails in background
             this.sendEmailsInBackground(campaign);
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Campaign sending started',
                 data: {
@@ -271,7 +270,7 @@ export class EmailCampaignController {
                 },
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to send campaign',
                 error: error.message,
@@ -308,13 +307,13 @@ export class EmailCampaignController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: campaign,
                 message: 'Campaign scheduled successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to schedule campaign',
                 error: error.message,
@@ -340,13 +339,13 @@ export class EmailCampaignController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: campaign,
                 message: 'Campaign paused successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to pause campaign',
                 error: error.message,
@@ -375,13 +374,13 @@ export class EmailCampaignController {
             // Resume sending
             this.sendEmailsInBackground(campaign);
 
-            res.json({
+            return res.json({
                 success: true,
                 data: campaign,
                 message: 'Campaign resumed successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to resume campaign',
                 error: error.message,
@@ -420,12 +419,12 @@ export class EmailCampaignController {
                     : 0,
             };
 
-            res.json({
+            return res.json({
                 success: true,
                 data: stats,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch statistics',
                 error: error.message,
@@ -451,7 +450,7 @@ export class EmailCampaignController {
 
             const total = await CampaignRecipient.countDocuments(filter);
 
-            res.json({
+            return res.json({
                 success: true,
                 data: recipients,
                 pagination: {
@@ -462,7 +461,7 @@ export class EmailCampaignController {
                 },
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch recipients',
                 error: error.message,
@@ -496,7 +495,7 @@ export class EmailCampaignController {
                 status: 'pending',
             });
 
-            const transporter = nodemailer.createTransporter({
+            const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
                 port: parseInt(process.env.SMTP_PORT || '587'),
                 secure: false,

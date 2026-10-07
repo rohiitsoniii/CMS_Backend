@@ -1,8 +1,11 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { Tenant, User, Project, ContentType, Content } from '../models/index.js';
+import { Tenant, Project, ContentType, Content } from '../models/index.js';
+import { assertScriptSafe } from './guards.js';
 
 dotenv.config();
+
+assertScriptSafe({ scriptName: 'seedSandbox', destructive: true });
 
 const DB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/headless-cms';
 

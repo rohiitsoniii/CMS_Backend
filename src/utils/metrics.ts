@@ -1,43 +1,43 @@
-import promClient from 'prom-client';
+import {
+  Registry,
+  collectDefaultMetrics,
+  Histogram,
+  Counter,
+} from 'prom-client';
 
-// Create a Registry
-export const register = new promClient.Registry();
+/**
+ * Real Prometheus metrics (prom-client is a production dependency).
+ * Served at GET /api/v1/metrics (see healthRoutes).
+ */
+export const register = new Registry();
 
-// Add default metrics (CPU, Memory, Event Loop Lag, etc.)
-promClient.collectDefaultMetrics({
-  app: 'headless-cms',
-  prefix: 'cms_',
-  register,
-});
+collectDefaultMetrics({ prefix: 'cms_', register, labels: { app: 'headless-cms' } });
 
-// Custom Metrics
-export const httpRequestDurationMicroseconds = new promClient.Histogram({
+export const httpRequestDurationMicroseconds = new Histogram({
   name: 'http_request_duration_seconds',
   help: 'Duration of HTTP requests in seconds',
   labelNames: ['method', 'route', 'status_code'],
-  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10]
+  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10],
+  registers: [register],
 });
 
-export const httpRequestsTotal = new promClient.Counter({
+export const httpRequestsTotal = new Counter({
   name: 'http_requests_total',
   help: 'Total number of HTTP requests',
-  labelNames: ['method', 'route', 'status_code']
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [register],
 });
 
-export const contentPublishedTotal = new promClient.Counter({
+export const contentPublishedTotal = new Counter({
   name: 'content_published_total',
   help: 'Total content published',
-  labelNames: ['tenantId', 'contentType']
+  labelNames: ['tenantId', 'contentType'],
+  registers: [register],
 });
 
-export const webhookDeliveryTotal = new promClient.Counter({
+export const webhookDeliveryTotal = new Counter({
   name: 'webhook_delivery_total',
   help: 'Total webhook deliveries',
-  labelNames: ['tenantId', 'status']
+  labelNames: ['tenantId', 'status'],
+  registers: [register],
 });
-
-// Register all custom metrics
-register.registerMetric(httpRequestDurationMicroseconds);
-register.registerMetric(httpRequestsTotal);
-register.registerMetric(contentPublishedTotal);
-register.registerMetric(webhookDeliveryTotal);

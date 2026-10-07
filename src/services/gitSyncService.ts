@@ -5,7 +5,7 @@ export class GitSyncService {
     /**
      * Pushes current project state (Schemas as JSON, Content as MDX) into a configured Git Repo
      */
-    async exportToGit(projectId: string, repoUrl: string, token: string): Promise<boolean> {
+    async exportToGit(projectId: string, repoUrl: string, _token: string): Promise<boolean> {
         console.log(`Starting export for ${projectId} to ${repoUrl}...`);
         try {
             // Under a real implementation, we'd use 'simple-git' or isomorphic-git here:
@@ -29,7 +29,7 @@ export class GitSyncService {
     /**
      * Webhook target that receives push events from Github/Gitlab to sync back into CMS
      */
-    async handleIncomingWebhook(payload: any, projectId: string): Promise<void> {
+    async handleIncomingWebhook(_payload: any, projectId: string): Promise<void> {
         // Here we parse Github webhook payloads
         // Extract modified/added/removed files
         // If file in /schemas, parsed JSON and upsert ContentType

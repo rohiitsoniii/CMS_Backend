@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { encrypt, decrypt, isEncrypted } from '../services/cryptoService';
+import { encrypt, isEncrypted } from '../services/cryptoService';
 
 
 /**
@@ -151,22 +151,22 @@ const LocaleConfigSchema = new Schema<ILocaleConfig>({
 LocaleConfigSchema.index({ tenantId: 1 }, { unique: true });
 
 // Virtual for enabled locales
-LocaleConfigSchema.virtual('enabledLocales').get(function() {
-  return this.locales.filter(l => l.isEnabled);
+LocaleConfigSchema.virtual('enabledLocales').get(function(this: any) {
+  return this.locales.filter((l: ILocale) => l.isEnabled);
 });
 
 // Methods
-LocaleConfigSchema.methods.getLocale = function(code: string): ILocale | undefined {
-  return this.locales.find(l => l.code === code);
+LocaleConfigSchema.methods.getLocale = function(this: any, code: string): ILocale | undefined {
+  return this.locales.find((l: ILocale) => l.code === code);
 };
 
-LocaleConfigSchema.methods.isLocaleEnabled = function(code: string): boolean {
+LocaleConfigSchema.methods.isLocaleEnabled = function(this: any, code: string): boolean {
   const locale = this.getLocale(code);
   return locale ? locale.isEnabled : false;
 };
 
-LocaleConfigSchema.methods.getDefaultLocale = function(): ILocale | undefined {
-  return this.locales.find(l => l.isDefault);
+LocaleConfigSchema.methods.getDefaultLocale = function(this: any): ILocale | undefined {
+  return this.locales.find((l: ILocale) => l.isDefault);
 };
 
 LocaleConfigSchema.methods.getFallbackChain = function(locale: string): string[] {

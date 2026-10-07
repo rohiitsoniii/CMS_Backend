@@ -94,7 +94,7 @@ export class ValidationService {
   }
 
   // Cross-field validation
-  private static validateCrossField(value: any, allData: any, dependentFields: string[]): boolean {
+  private static validateCrossField(_value: any, _allData: any, _dependentFields: string[]): boolean {
     // Example: validate that end_date > start_date
     // This is a simple implementation - can be enhanced
     return true;

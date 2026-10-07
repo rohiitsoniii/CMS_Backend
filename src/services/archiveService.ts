@@ -1,6 +1,6 @@
 import { Archive } from '../models/Archive';
 import { Content } from '../models/Content';
-import { ContentType } from '../models/ContentType';
+import ContentType from '../models/ContentType';
 
 export class ArchiveService {
   // Archive content

@@ -9,9 +9,9 @@ export const bulkOperationsController = {
       const userId = req.user!.id;
 
       const results = await BulkOperationsService.bulkPublish(contentIds, userId);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -22,9 +22,9 @@ export const bulkOperationsController = {
       const userId = req.user!.id;
 
       const results = await BulkOperationsService.bulkUnpublish(contentIds, userId);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -36,9 +36,9 @@ export const bulkOperationsController = {
       const userId = req.user!.id;
 
       const results = await BulkOperationsService.bulkDelete(contentIds, projectId, userId);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -47,9 +47,9 @@ export const bulkOperationsController = {
     try {
       const { contentIds, tags } = req.body;
       const results = await BulkOperationsService.bulkAddTags(contentIds, tags);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -58,9 +58,9 @@ export const bulkOperationsController = {
     try {
       const { contentIds, tags } = req.body;
       const results = await BulkOperationsService.bulkRemoveTags(contentIds, tags);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -69,9 +69,9 @@ export const bulkOperationsController = {
     try {
       const { contentIds, fieldPath, value } = req.body;
       const results = await BulkOperationsService.bulkUpdateField(contentIds, fieldPath, value);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -84,9 +84,9 @@ export const bulkOperationsController = {
         new Date(publishAt),
         unpublishAt ? new Date(unpublishAt) : undefined
       );
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   },
 
@@ -95,9 +95,9 @@ export const bulkOperationsController = {
     try {
       const { fileIds, folderId } = req.body;
       const results = await BulkOperationsService.bulkMoveToFolder(fileIds, folderId);
-      res.json(results);
+      return res.json(results);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
   }
 };

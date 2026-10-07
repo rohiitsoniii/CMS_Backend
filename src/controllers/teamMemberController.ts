@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { TeamMember } from '../models/TeamMember';
 import { Role } from '../models/Role';
 import nodemailer from 'nodemailer';
@@ -25,12 +26,12 @@ export class TeamMemberController {
                 .populate('invitedBy', 'name email')
                 .sort({ createdAt: -1 });
 
-            res.json({
+            return res.json({
                 success: true,
                 data: members,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch team members',
                 error: error.message,
@@ -55,12 +56,12 @@ export class TeamMemberController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: member,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch team member',
                 error: error.message,
@@ -71,17 +72,61 @@ export class TeamMemberController {
     // Invite team member
     async inviteTeamMember(req: Request, res: Response) {
         try {
-            const { projectId, email, name, roleId } = req.body;
-            const userId = (req as any).user.id;
+            let { projectId, email, name, roleId, role: roleName } = req.body;
+            const userId = (req as any).user?.id || (req as any).user?._id;
 
-            if (!projectId || !email || !name || !roleId) {
+            if (!email) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Missing required fields',
+                    message: 'Email is required',
                 });
             }
 
-            // Check if email already invited
+            if (!name) {
+                name = email.split('@')[0];
+            }
+
+            // Fallback for projectId if not specified
+            if (!projectId) {
+                const { Project } = await import('../models/Project.js');
+                const tenantId = (req as any).tenantId || (req as any).user?.tenantId;
+                const userProject = await Project.findOne(
+                    tenantId ? { tenantId } : { ownerId: userId }
+                );
+                if (userProject) {
+                    projectId = userProject._id.toString();
+                }
+            }
+
+            if (!projectId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Project ID is required',
+                });
+            }
+
+            // Resolve role
+            let role = null;
+            if (roleId && mongoose.isValidObjectId(roleId)) {
+                role = await Role.findById(roleId);
+            }
+            if (!role) {
+                const targetName = roleName || 'Editor';
+                role = await Role.findOne({ 
+                    name: { $regex: new RegExp(`^${targetName}$`, 'i') } 
+                }) || await Role.findOne({ isDefault: true }) || await Role.findOne();
+            }
+
+            if (!role) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Role not found',
+                });
+            }
+
+            roleId = role._id;
+
+            // Prevent duplicate invites for same project + email
             const existingMember = await TeamMember.findOne({
                 projectId,
                 email,
@@ -92,15 +137,6 @@ export class TeamMemberController {
                 return res.status(400).json({
                     success: false,
                     message: 'User already invited or is a team member',
-                });
-            }
-
-            // Verify role exists
-            const role = await Role.findById(roleId);
-            if (!role) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Role not found',
                 });
             }
 
@@ -115,7 +151,7 @@ export class TeamMemberController {
             });
 
             // Generate invitation token
-            const token = member.generateInvitationToken();
+            const token = (member as any).generateInvitationToken();
             await member.save();
 
             // Send invitation email
@@ -125,13 +161,13 @@ export class TeamMemberController {
                 .populate('roleId', 'name description')
                 .populate('invitedBy', 'name email');
 
-            res.status(201).json({
+            return res.status(201).json({
                 success: true,
                 data: populatedMember,
                 message: 'Team member invited successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to invite team member',
                 error: error.message,
@@ -177,13 +213,13 @@ export class TeamMemberController {
                 .populate('roleId', 'name description permissions')
                 .populate('userId', 'name email avatar');
 
-            res.json({
+            return res.json({
                 success: true,
                 data: populatedMember,
                 message: 'Invitation accepted successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to accept invitation',
                 error: error.message,
@@ -210,13 +246,13 @@ export class TeamMemberController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: member,
                 message: 'Team member updated successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to update team member',
                 error: error.message,
@@ -259,13 +295,13 @@ export class TeamMemberController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: member,
                 message: 'Role changed successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to change role',
                 error: error.message,
@@ -291,13 +327,13 @@ export class TeamMemberController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: member,
                 message: 'Team member suspended successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to suspend team member',
                 error: error.message,
@@ -323,13 +359,13 @@ export class TeamMemberController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: member,
                 message: 'Team member reactivated successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to reactivate team member',
                 error: error.message,
@@ -355,12 +391,12 @@ export class TeamMemberController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Team member removed successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to remove team member',
                 error: error.message,
@@ -390,18 +426,18 @@ export class TeamMemberController {
             }
 
             // Generate new token
-            const token = member.generateInvitationToken();
+            const token = (member as any).generateInvitationToken();
             await member.save();
 
             // Send invitation email
             await this.sendInvitationEmail(member, token);
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Invitation resent successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to resend invitation',
                 error: error.message,
@@ -412,7 +448,7 @@ export class TeamMemberController {
     // Helper: Send invitation email
     private async sendInvitationEmail(member: any, token: string) {
         try {
-            const transporter = nodemailer.createTransporter({
+            const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
                 port: parseInt(process.env.SMTP_PORT || '587'),
                 secure: false,
@@ -422,7 +458,7 @@ export class TeamMemberController {
                 },
             });
 
-            const invitationUrl = `${process.env.FRONTEND_URL}/accept-invitation?token=${token}`;
+            const invitationUrl = `${process.env.FRONTEND_URL}/accept-invite?token=${token}`;
 
             await transporter.sendMail({
                 from: process.env.SMTP_FROM || 'noreply@example.com',

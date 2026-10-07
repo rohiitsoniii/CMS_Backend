@@ -38,14 +38,14 @@ export const getWorkflows = async (req: Request, res: Response) => {
 
     const workflows = await Workflow.find(query).sort({ createdAt: -1 });
 
-    res.json({
+    return res.json({
       success: true,
       data: workflows,
       total: workflows.length
     });
   } catch (error: any) {
     console.error('Error fetching workflows:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch workflows',
       error: error.message
@@ -75,7 +75,7 @@ export const getWorkflow = async (req: Request, res: Response) => {
       workflow = await Workflow.findOne({ _id: apiId, tenantId });
     }
     if (!workflow) {
-      workflow = await Workflow.findByApiId(tenantId, apiId);
+      workflow = await (Workflow as any).findByApiId(tenantId, apiId);
     }
 
     if (!workflow) {
@@ -85,13 +85,13 @@ export const getWorkflow = async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: workflow
     });
   } catch (error: any) {
     console.error('Error fetching workflow:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch workflow',
       error: error.message
@@ -154,7 +154,7 @@ export const createWorkflow = async (req: Request, res: Response) => {
     }));
 
     // Ensure apiId uniqueness
-    const exists = await Workflow.apiIdExists(tenantId, cleanApiId);
+    const exists = await (Workflow as any).apiIdExists(tenantId, cleanApiId);
     const finalApiId = exists ? `${cleanApiId}-${Date.now().toString(36)}` : cleanApiId;
 
     // Create workflow
@@ -174,14 +174,14 @@ export const createWorkflow = async (req: Request, res: Response) => {
 
     await workflow.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Workflow created successfully',
       data: workflow
     });
   } catch (error: any) {
     console.error('Error creating workflow:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to create workflow',
       error: error.message
@@ -213,7 +213,7 @@ export const updateWorkflow = async (req: Request, res: Response) => {
       workflow = await Workflow.findOne({ _id: apiId, tenantId });
     }
     if (!workflow) {
-      workflow = await Workflow.findByApiId(tenantId, apiId);
+      workflow = await (Workflow as any).findByApiId(tenantId, apiId);
     }
 
     if (!workflow) {
@@ -247,14 +247,14 @@ export const updateWorkflow = async (req: Request, res: Response) => {
     workflow.updatedBy = userId;
     await workflow.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Workflow updated successfully',
       data: workflow
     });
   } catch (error: any) {
     console.error('Error updating workflow:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to update workflow',
       error: error.message
@@ -284,7 +284,7 @@ export const deleteWorkflow = async (req: Request, res: Response) => {
       workflow = await Workflow.findOne({ _id: apiId, tenantId });
     }
     if (!workflow) {
-      workflow = await Workflow.findByApiId(tenantId, apiId);
+      workflow = await (Workflow as any).findByApiId(tenantId, apiId);
     }
 
     if (!workflow) {
@@ -296,13 +296,13 @@ export const deleteWorkflow = async (req: Request, res: Response) => {
 
     await workflow.deleteOne();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Workflow deleted successfully'
     });
   } catch (error: any) {
     console.error('Error deleting workflow:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to delete workflow',
       error: error.message
@@ -347,7 +347,7 @@ export const startWorkflow = async (req: Request, res: Response) => {
       workflow = await Workflow.findById(workflowId);
     }
     if (!workflow) {
-      workflow = await Workflow.findByApiId(tenantId, workflowId);
+      workflow = await (Workflow as any).findByApiId(tenantId, workflowId);
     }
     if (!workflow) {
       return res.status(404).json({
@@ -366,7 +366,7 @@ export const startWorkflow = async (req: Request, res: Response) => {
     }
 
     // Get first step
-    const firstStep = workflow.getFirstStep();
+    const firstStep = (workflow as any).getFirstStep();
     if (!firstStep) {
       return res.status(400).json({
         success: false,
@@ -398,14 +398,14 @@ export const startWorkflow = async (req: Request, res: Response) => {
 
     await workflowState.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Workflow started successfully',
       data: { workflowState }
     });
   } catch (error: any) {
     console.error('Error starting workflow:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to start workflow',
       error: error.message
@@ -442,7 +442,7 @@ export const advanceWorkflow = async (req: Request, res: Response) => {
     }
 
     // Check if user is assigned
-    if (!workflowState.isAssignedTo(userId)) {
+    if (!(workflowState as any).isAssignedTo(userId)) {
       return res.status(403).json({
         success: false,
         message: 'You are not assigned to approve this step'
@@ -459,11 +459,11 @@ export const advanceWorkflow = async (req: Request, res: Response) => {
     }
 
     // Get next step
-    const nextStep = workflow.getNextStep(workflowState.currentStepId);
+    const nextStep = (workflow as any).getNextStep(workflowState.currentStepId);
     if (!nextStep) {
       // No next step - workflow complete
-      workflowState.complete();
-      workflowState.addAction({
+      (workflowState as any).complete();
+      (workflowState as any).addAction({
         action: 'advance',
         stepId: workflowState.currentStepId,
         stepName: workflowState.currentStepName,
@@ -490,7 +490,7 @@ export const advanceWorkflow = async (req: Request, res: Response) => {
     }
 
     // Advance to next step
-    workflowState.addAction({
+    (workflowState as any).addAction({
       action: 'advance',
       stepId: workflowState.currentStepId,
       stepName: workflowState.currentStepName,
@@ -505,14 +505,14 @@ export const advanceWorkflow = async (req: Request, res: Response) => {
 
     await workflowState.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Workflow advanced to next step',
       data: { workflowState }
     });
   } catch (error: any) {
     console.error('Error advancing workflow:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to advance workflow',
       error: error.message
@@ -547,7 +547,7 @@ export const rejectWorkflow = async (req: Request, res: Response) => {
       });
     }
 
-    if (!workflowState.isAssignedTo(userId)) {
+    if (!(workflowState as any).isAssignedTo(userId)) {
       return res.status(403).json({
         success: false,
         message: 'You are not assigned to this step'
@@ -563,7 +563,7 @@ export const rejectWorkflow = async (req: Request, res: Response) => {
     }
 
     // Add reject action
-    workflowState.addAction({
+    (workflowState as any).addAction({
       action: 'reject',
       stepId: workflowState.currentStepId,
       stepName: workflowState.currentStepName,
@@ -574,7 +574,7 @@ export const rejectWorkflow = async (req: Request, res: Response) => {
 
     if (sendToStep) {
       // Send to specific step
-      const targetStep = workflow.getStep(sendToStep);
+      const targetStep = (workflow as any).getStep(sendToStep);
       if (targetStep) {
         workflowState.currentStepId = targetStep.id;
         workflowState.currentStepName = targetStep.name;
@@ -582,27 +582,27 @@ export const rejectWorkflow = async (req: Request, res: Response) => {
       }
     } else {
       // Send to previous step
-      const prevStep = workflow.getPreviousStep(workflowState.currentStepId);
+      const prevStep = (workflow as any).getPreviousStep(workflowState.currentStepId);
       if (prevStep) {
         workflowState.currentStepId = prevStep.id;
         workflowState.currentStepName = prevStep.name;
         workflowState.assignedTo = prevStep.assignedTo || [];
       } else {
         // No previous step - reject entire workflow
-        workflowState.reject();
+        (workflowState as any).reject();
       }
     }
 
     await workflowState.save();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Workflow rejected',
       data: { workflowState }
     });
   } catch (error: any) {
     console.error('Error rejecting workflow:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to reject workflow',
       error: error.message
@@ -641,13 +641,13 @@ export const getWorkflowState = async (req: Request, res: Response) => {
 
     const workflow = await Workflow.findById(workflowState.workflowId);
 
-    res.json({
+    return res.json({
       success: true,
       data: { workflowState, workflow }
     });
   } catch (error: any) {
     console.error('Error fetching workflow state:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch workflow state',
       error: error.message

@@ -115,21 +115,21 @@ MediaFolderSchema.methods.isRoot = function(): boolean {
   return this.level === 0 && !this.parentId;
 };
 
-MediaFolderSchema.methods.hasChildren = async function(): Promise<boolean> {
-  const count = await this.constructor.countDocuments({ parentId: this._id });
+MediaFolderSchema.methods.hasChildren = async function(this: any): Promise<boolean> {
+  const count = await (this.constructor as any).countDocuments({ parentId: this._id });
   return count > 0;
 };
 
-MediaFolderSchema.methods.getChildren = function() {
-  return this.constructor.find({ parentId: this._id }).sort({ name: 1 });
+MediaFolderSchema.methods.getChildren = function(this: any) {
+  return (this.constructor as any).find({ parentId: this._id }).sort({ name: 1 });
 };
 
-MediaFolderSchema.methods.getAncestors = async function(): Promise<IMediaFolder[]> {
+MediaFolderSchema.methods.getAncestors = async function(this: any): Promise<IMediaFolder[]> {
   const ancestors: IMediaFolder[] = [];
   let current = this;
-  
+
   while (current.parentId) {
-    const parent = await this.constructor.findById(current.parentId);
+    const parent = await (this.constructor as any).findById(current.parentId);
     if (!parent) break;
     ancestors.unshift(parent);
     current = parent;
@@ -155,11 +155,11 @@ MediaFolderSchema.statics.findByPath = function(tenantId: mongoose.Types.ObjectI
   return this.findOne({ tenantId, path });
 };
 
-MediaFolderSchema.statics.buildPath = async function(parentId?: mongoose.Types.ObjectId, slug?: string): Promise<string> {
+MediaFolderSchema.statics.buildPath = async function(this: any, parentId?: mongoose.Types.ObjectId, slug?: string): Promise<string> {
   if (!parentId) {
     return `/${slug || ''}`;
   }
-  
+
   const parent = await this.findById(parentId);
   if (!parent) {
     throw new Error('Parent folder not found');
@@ -169,15 +169,15 @@ MediaFolderSchema.statics.buildPath = async function(parentId?: mongoose.Types.O
 };
 
 // Pre-save middleware
-MediaFolderSchema.pre('save', async function(next) {
+MediaFolderSchema.pre('save', async function(this: any, next) {
   // Build path if not set
   if (!this.path && this.slug) {
     this.path = await (this.constructor as any).buildPath(this.parentId, this.slug);
   }
-  
+
   // Set level based on parent
   if (this.parentId) {
-    const parent = await this.constructor.findById(this.parentId);
+    const parent = await (this.constructor as any).findById(this.parentId);
     if (parent) {
       this.level = (parent as any).level + 1;
     }
@@ -189,7 +189,7 @@ MediaFolderSchema.pre('save', async function(next) {
 });
 
 // Pre-remove middleware
-MediaFolderSchema.pre('deleteOne', { document: true, query: false }, async function(next) {
+MediaFolderSchema.pre('deleteOne', { document: true, query: false }, async function(this: any, next) {
   // Check if folder has children
   const hasChildren = await this.hasChildren();
   if (hasChildren) {

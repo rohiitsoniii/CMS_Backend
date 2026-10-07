@@ -27,7 +27,7 @@ export const deliveryRateLimit = rateLimit({
         return `delivery:${req.params.projectSlug || req.ip}`;
     },
 
-    handler: (req: Request, res: Response) => {
+    handler: (_req: Request, res: Response) => {
         res.status(429).json({
             success: false,
             error: 'Too Many Requests',
@@ -37,7 +37,7 @@ export const deliveryRateLimit = rateLimit({
         });
     },
 
-    skip: (req: Request): boolean => {
+    skip: (_req: Request): boolean => {
         // Skip rate limiting in test environment
         return process.env.NODE_ENV === 'test';
     },
@@ -56,7 +56,7 @@ export const deliveryHeavyRateLimit = rateLimit({
         return `delivery-heavy:${req.params.projectSlug || req.ip}`;
     },
 
-    handler: (req: Request, res: Response) => {
+    handler: (_req: Request, res: Response) => {
         res.status(429).json({
             success: false,
             error: 'Too Many Requests',

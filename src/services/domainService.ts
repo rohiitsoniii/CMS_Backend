@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { Tenant } from '../models/Tenant.js';
 
 export interface IDomain {
   _id: mongoose.Types.ObjectId;

@@ -40,8 +40,9 @@ import deploymentRoutes from './deploymentRoutes.js';
 import systemRoutes from './systemRoutes.js';
 import nlqRoutes from './nlqRoutes.js';
 import docsRoutes from './docsRoutes.js';
-import scimRoutes from './scimRoutes.js';
+import scimRoutes, { scimAdminRouter } from './scimRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
+import gdprRoutes from './gdprRoutes.js';
 import ragBotRoutes from './ragBotRoutes.js';
 import ragPublicRoutes from './ragPublicRoutes.js';
 import seoRoutes from './seoRoutes.js';
@@ -95,13 +96,15 @@ router.use('/content', contentRoutes);
 
 // Cross-project content activity (Phase 6)
 router.get('/projects/all/content/recent', authenticateJWT, (req, res, next) => {
-  import('../controllers/contentController.js').then(ctrl => ctrl.getRecentContent(req, res)).catch(next);
+  import('../controllers/contentController.js').then(ctrl => (ctrl.getRecentContent as any)(req, res, next)).catch(next);
 });
 
 
 // Content-specific routes (Phase 2 & 3)
 // These are mounted globally for easier access
 router.use('/content/:id/versions', versionRoutes);
+// Alias for frontend legacy path /projects/:projectId/content/:id/versions
+router.use('/projects/:projectId/content/:id/versions', versionRoutes);
 router.use('/content/:id/workflow', contentWorkflowRouter);
 router.use('/content/:id/schedules', contentScheduleRouter);
 
@@ -131,11 +134,10 @@ router.use('/users', endUserRoutes);
 // Audit Logs
 router.use('/audit-logs', auditRoutes);
 
-// Backups
-router.use('/backups', backupRoutes);
+// Backups (single mount at root; router defines /backups + /projects/:projectId/backups)
+router.use('/', backupRoutes);
 
-// Trash/Recycle Bin
-router.use('/trash', trashRoutes);
+// Trash/Recycle Bin (single mount at root; router defines /projects/:projectId/trash + /trash/...)
 router.use('/', trashRoutes);
 
 // Content Duplication
@@ -150,8 +152,7 @@ router.use('/comments', commentsRoutes);
 // Validation Rules
 router.use('/validation', validationRoutes);
 
-// Archive
-router.use('/archive', archiveRoutes);
+// Archive (single mount at root; router defines /archive/... + /projects/:projectId/archive)
 router.use('/', archiveRoutes);
 
 // Field-Level Permissions
@@ -171,6 +172,9 @@ router.use('/help', helpCenterRoutes);
 
 // Notifications
 router.use('/notifications', notificationRoutes);
+
+// GDPR data-subject rights (export + erasure)
+router.use('/gdpr', gdprRoutes);
 
 // Preview Tokens
 router.use('/projects/:projectId', previewRoutes);
@@ -213,6 +217,8 @@ router.use('/docs', docsRoutes);
 
 // SCIM Provisioning
 router.use('/scim/v2', scimRoutes);
+// SCIM token management (JWT + users:manage guarded; logic lives in scimRoutes.ts)
+router.use('/admin/scim', scimAdminRouter);
 
 
 

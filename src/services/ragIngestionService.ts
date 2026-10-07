@@ -5,7 +5,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 // @ts-ignore
 import pdf from 'pdf-parse';
-import { Knowledge, RagBot, Content } from '../models/index.js';
+import { Knowledge, Content } from '../models/index.js';
 import { embeddingService } from './embeddingService.js';
 import mongoose from 'mongoose';
 
@@ -57,7 +57,7 @@ export class RagIngestionService {
 
     if (fileExt === '.pdf') {
       const dataBuffer = fs.readFileSync(filePath);
-      const data = await pdf(dataBuffer);
+      const data = await (pdf as any)(dataBuffer);
       text = data.text;
     } else if (fileExt === '.txt' || fileExt === '.md') {
       text = fs.readFileSync(filePath, 'utf8');

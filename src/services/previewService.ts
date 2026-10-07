@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { PreviewToken } from '../models/PreviewToken.js';
 import { Content } from '../models/Content.js';
-import { ContentType } from '../models/ContentType.js';
+import ContentType from '../models/ContentType.js';
 import mongoose from 'mongoose';
 
 export class PreviewService {

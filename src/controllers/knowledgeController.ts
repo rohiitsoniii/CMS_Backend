@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Knowledge, Project } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
+import { escapeSearchTerm } from '../utils/queryBuilder.js';
 
 /**
  * Knowledge Base Controller
@@ -29,11 +30,12 @@ export const getKnowledgeList = asyncHandler(async (req: Request, res: Response)
   
   if (category) query.category = category;
   if (status) query.status = status;
-  if (search) {
+  if (search && typeof search === 'string') {
+    const term = escapeSearchTerm(search);
     query.$or = [
-      { question: { $regex: search, $options: 'i' } },
-      { answer: { $regex: search, $options: 'i' } },
-      { keywords: { $in: [new RegExp(search as string, 'i')] } },
+      { question: { $regex: term, $options: 'i' } },
+      { answer: { $regex: term, $options: 'i' } },
+      { keywords: { $in: [new RegExp(term, 'i')] } },
     ];
   }
   

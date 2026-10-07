@@ -1,10 +1,10 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import aiService from '../services/aiService.js';
 import { Content } from '../models/index.js';
 import mongoose from 'mongoose';
 
-export const queryDatabase = asyncHandler(async (req: Request, res: Response) => {
+export const queryDatabase = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { query, projectId } = req.body;
 
   if (!query) {

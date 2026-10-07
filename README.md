@@ -103,7 +103,6 @@ backend/
 │   ├── scripts/          # Database seeders & test suites
 │   ├── app.ts            # Express application bootstrap
 │   └── server.ts         # Server entry point
-├── Dockerfile            # Container configuration
 ├── package.json          # Dependencies and scripts
 └── tsconfig.json         # TypeScript configuration
 ```

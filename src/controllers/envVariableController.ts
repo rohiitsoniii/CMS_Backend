@@ -4,7 +4,7 @@ import { EnvVariableService } from '../services/envVariableService.js';
 export class EnvVariableController {
   static async createVariable(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const userId = req.user!.id;
       const { key, value, isSecret, description, category, environment, projectId } = req.body;
 
@@ -20,7 +20,7 @@ export class EnvVariableController {
         userId
       );
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: {
           ...variable.toObject(),
@@ -28,7 +28,7 @@ export class EnvVariableController {
         }
       });
     } catch (error: any) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: error.message
       });
@@ -37,7 +37,7 @@ export class EnvVariableController {
 
   static async updateVariable(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { id } = req.params;
       const { value, description, category, environment } = req.body;
 
@@ -55,7 +55,7 @@ export class EnvVariableController {
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         data: {
           ...variable.toObject(),
@@ -63,7 +63,7 @@ export class EnvVariableController {
         }
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -72,7 +72,7 @@ export class EnvVariableController {
 
   static async deleteVariable(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { id } = req.params;
 
       const deleted = await EnvVariableService.deleteVariable(id, tenantId);
@@ -84,12 +84,12 @@ export class EnvVariableController {
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Variable deleted successfully'
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -98,7 +98,7 @@ export class EnvVariableController {
 
   static async getVariables(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { projectId, category, environment, includeSecrets } = req.query;
 
       const variables = await EnvVariableService.getVariables(tenantId, {
@@ -108,12 +108,12 @@ export class EnvVariableController {
         includeSecrets: includeSecrets === 'true'
       });
 
-      res.json({
+      return res.json({
         success: true,
         data: variables
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -122,7 +122,7 @@ export class EnvVariableController {
 
   static async getVariable(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { id } = req.params;
 
       const variable = await EnvVariableService.getVariableById(id, tenantId);
@@ -134,7 +134,7 @@ export class EnvVariableController {
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         data: {
           ...variable.toObject(),
@@ -142,7 +142,7 @@ export class EnvVariableController {
         }
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -151,7 +151,7 @@ export class EnvVariableController {
 
   static async exportVariables(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const { includeSecrets } = req.query;
 
       const content = await EnvVariableService.exportVariables(tenantId, {
@@ -160,9 +160,9 @@ export class EnvVariableController {
 
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Content-Disposition', 'attachment; filename=".env"');
-      res.send(content);
+      return res.send(content);
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });
@@ -171,7 +171,7 @@ export class EnvVariableController {
 
   static async bulkCreate(req: Request, res: Response) {
     try {
-      const tenantId = req.user!.tenantId;
+      const tenantId = req.user!.tenantId.toString();
       const userId = req.user!.id;
       const { variables } = req.body;
 
@@ -184,12 +184,12 @@ export class EnvVariableController {
 
       const result = await EnvVariableService.bulkCreateVariables(tenantId, variables, userId);
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         message: `${Object.keys(result.insertedIds).length} variables created`
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: error.message
       });

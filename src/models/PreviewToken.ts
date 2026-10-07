@@ -11,6 +11,8 @@ export interface IPreviewToken extends Document {
   createdAt: Date;
   isUsed: boolean;
   usedAt?: Date;
+  isExpired(): boolean;
+  isValid(): boolean;
 }
 
 const previewTokenSchema = new Schema<IPreviewToken>({

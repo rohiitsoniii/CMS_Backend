@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { RagBot, Knowledge } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { ragIngestionService } from '../services/ragIngestionService.js';
@@ -9,7 +9,7 @@ import fs from 'fs';
  * Manage knowledge sources for a bot
  */
 
-export const uploadDocument = asyncHandler(async (req: Request, res: Response) => {
+export const uploadDocument = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   const file = req.file;
   
@@ -49,7 +49,7 @@ export const uploadDocument = asyncHandler(async (req: Request, res: Response) =
   }
 });
 
-export const crawlUrl = asyncHandler(async (req: Request, res: Response) => {
+export const crawlUrl = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
   const { url, maxDepth } = req.body;
   
@@ -76,9 +76,9 @@ export const crawlUrl = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const syncCmsContent = asyncHandler(async (req: Request, res: Response) => {
+export const syncCmsContent = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const { projectId, botId } = req.params;
-  
+
   const bot = await RagBot.findOne({ 
     _id: botId, 
     projectId, 
@@ -98,8 +98,8 @@ export const syncCmsContent = asyncHandler(async (req: Request, res: Response) =
   });
 });
 
-export const listSources = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, botId } = req.params;
+export const listSources = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { projectId } = req.params;
   
   // We identify sources by unique sourceType + sourceUrl/sourceFile
   // For simplicity, we just return all knowledge entries for the project that have a sourceType
@@ -140,8 +140,8 @@ export const listSources = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export const deleteSource = asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, botId } = req.params;
+export const deleteSource = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { projectId } = req.params;
   const { type, hash } = req.query;
   
   if (!type || !hash) {

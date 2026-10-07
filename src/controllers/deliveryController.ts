@@ -152,17 +152,19 @@ export const getBlogs = asyncHandler(async (req: Request, res: Response): Promis
     isDeleted: false,
   };
   
-  if (category) query['meta.category'] = category;
-  if (tag) query['meta.tags'] = tag;
+  if (category && typeof category === 'string') query['meta.category'] = category.slice(0, 100);
+  if (tag && typeof tag === 'string') query['meta.tags'] = tag.slice(0, 100);
   if (featured === 'true') query['meta.featured'] = true;
-  
-  const skip = (Number(page) - 1) * Number(limit);
-  
+
+  const safePage = Math.max(1, Math.floor(Number(page)) || 1);
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(Number(limit)) || 10));
+  const skip = (safePage - 1) * safeLimit;
+
   const [blogs, total] = await Promise.all([
     Content.find(query)
       .sort({ 'meta.publishedAt': -1, 'meta.pinned': -1 })
       .skip(skip)
-      .limit(Number(limit))
+      .limit(safeLimit)
       .select('name slug data.title data.excerpt data.featuredImage localizedData meta.publishedAt meta.readTime meta.category meta.tags seo'),
     Content.countDocuments(query),
   ]);
@@ -193,10 +195,10 @@ export const getBlogs = asyncHandler(async (req: Request, res: Response): Promis
     data: {
       blogs: formattedBlogs,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: safePage,
+        limit: safeLimit,
         total,
-        pages: Math.ceil(total / Number(limit)),
+        pages: Math.ceil(total / safeLimit),
       },
     },
   });
@@ -481,7 +483,7 @@ export const chatWithBot = asyncHandler(async (req: Request, res: Response): Pro
     response = matchedKnowledge.answer;
     
     // Record usage
-    await matchedKnowledge.recordUsage();
+    await (matchedKnowledge as any).recordUsage();
   } else {
     // No match found, use fallback
     response = project.chatbot.fallbackMessage || "I'm sorry, I don't have information about that. Would you like to speak with a human?";

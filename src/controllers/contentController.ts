@@ -7,6 +7,9 @@ import { AuditService } from '../services/AuditService.js';
 import { NotificationService } from '../services/notificationService.js';
 import { CacheService } from '../services/cacheService.js';
 import { embeddingService } from '../services/embeddingService.js';
+import { contentPublishedTotal } from '../utils/metrics.js';
+import { escapeSearchTerm } from '../utils/queryBuilder.js';
+import { runInTransaction } from '../utils/transactions.js';
 
 /**
  * Create content
@@ -52,33 +55,41 @@ export const createContent = asyncHandler(async (req: Request, res: Response): P
     throw new AppError('A content item with this slug already exists', 400, 'DUPLICATE_SLUG');
   }
   
-  // If isDefault and there's already a default, unset it
-  if (isDefault) {
-    await Content.updateMany(
-      { projectId, type: resolvedType, isDeleted: false },
-      { isDefault: false }
-    );
-  }
-  
-  const content = await Content.create({
-    projectId,
-    tenantId: req.tenantId,
-    type: resolvedType,
-    contentTypeId: contentTypeId || undefined,
-    name: resolvedName,
-    slug: resolvedSlug,
-    data: data || {},
-    status: status || 'draft',
-    isDefault: isDefault || false,
-    visibility: visibility || 'public',
-    meta: meta || {},
-    seo: seo || {},
-    locale: locale || project.settings?.defaultLocale || 'en',
-    createdBy: req.userId,
+  // If isDefault and there's already a default, unset it — together with
+  // the create + stats update inside one transaction (no half-created state)
+  const content = await runInTransaction(async (session) => {
+    const opts = session ? { session } : {};
+    if (isDefault) {
+      await Content.updateMany(
+        { projectId, type: resolvedType, isDeleted: false },
+        { isDefault: false },
+        opts
+      );
+    }
+    const created = await Content.create(
+      [
+        {
+          projectId,
+          tenantId: req.tenantId,
+          type: resolvedType,
+          contentTypeId: contentTypeId || undefined,
+          name: resolvedName,
+          slug: resolvedSlug,
+          data: data || {},
+          status: status || 'draft',
+          isDefault: isDefault || false,
+          visibility: visibility || 'public',
+          meta: meta || {},
+          seo: seo || {},
+          locale: locale || project.settings?.defaultLocale || 'en',
+          createdBy: req.userId,
+        },
+      ],
+      opts
+    ).then((docs) => docs[0]);
+    await Project.updateOne({ _id: projectId }, { $inc: { 'stats.contentCount': 1 } }, opts);
+    return created;
   });
-  
-  // Update project stats
-  await Project.updateOne({ _id: projectId }, { $inc: { 'stats.contentCount': 1 } });
   
   await AuditService.log(req, 'content.create', {
     type: 'Content',
@@ -114,50 +125,55 @@ export const createContent = asyncHandler(async (req: Request, res: Response): P
 export const getContentList = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const projectId = req.params.projectId || req.query.projectId;
   const { type, contentTypeId, status, search, page = 1, limit = 20, includeArchived } = req.query;
-  
+
   const query: Record<string, unknown> = {
     tenantId: req.tenantId,
     isDeleted: false,
   };
-  
-  if (projectId) query.projectId = projectId;
-  if (type) query.type = type;
-  if (contentTypeId) query.contentTypeId = contentTypeId;
-  if (status && status !== 'all') query.status = status;
+
+  // Coerce to strings — Express parses ?type[$gt]= as an object (qs),
+  // which would otherwise land verbatim in the Mongo query (NoSQL injection).
+  if (projectId) query.projectId = String(projectId);
+  if (type) query.type = String(type);
+  if (contentTypeId) query.contentTypeId = String(contentTypeId);
+  if (status && status !== 'all') query.status = String(status);
   if (!includeArchived && (!status || status === 'all')) query.status = { $ne: 'archived' };
-  
-  if (search) {
+
+  if (search && typeof search === 'string') {
+    const term = escapeSearchTerm(search);
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { 'data.title': { $regex: search, $options: 'i' } },
+      { name: { $regex: term, $options: 'i' } },
+      { 'data.title': { $regex: term, $options: 'i' } },
     ];
   }
-  
-  const skip = (Number(page) - 1) * Number(limit);
-  
+
+  const safePage = Math.max(1, Math.floor(Number(page)) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit)) || 20));
+  const skip = (safePage - 1) * safeLimit;
+
   const [contents, total] = await Promise.all([
     Content.find(query)
       .sort({ isDefault: -1, 'meta.order': 1, updatedAt: -1 })
       .skip(skip)
-      .limit(Number(limit))
+      .limit(safeLimit)
       .populate('createdBy', 'firstName lastName')
       .populate('meta.author', 'firstName lastName'),
     Content.countDocuments(query),
   ]);
-  
+
   res.json({
     success: true,
     data: contents,
     contents,
     pagination: {
-      page: Number(page),
-      limit: Number(limit),
+      page: safePage,
+      limit: safeLimit,
       total,
-      pages: Math.ceil(total / Number(limit)),
+      pages: Math.ceil(total / safeLimit),
     },
     total,
-    page: Number(page),
-    pages: Math.ceil(total / Number(limit)),
+    page: safePage,
+    pages: Math.ceil(total / safeLimit),
   });
 });
 
@@ -189,7 +205,7 @@ export const getContentByType = (contentType: ContentType) => {
     };
 
     
-    if (status) query.status = status;
+    if (status) query.status = String(status);
     
     const contents = await Content.find(query)
       .sort({ isDefault: -1, 'meta.order': 1, updatedAt: -1 })
@@ -328,15 +344,17 @@ export const setContentAsDefault = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Content not found', 404);
   }
   
-  // Unset all other defaults of same type
-  await Content.updateMany(
-    { projectId: content.projectId, tenantId: req.tenantId, type: content.type, _id: { $ne: id }, isDeleted: false },
-    { isDefault: false }
-  );
-
-  // Set this as default
-  content.isDefault = true;
-  await content.save();
+  // Unset all other defaults of same type + set this one atomically
+  await runInTransaction(async (session) => {
+    const opts = session ? { session } : {};
+    await Content.updateMany(
+      { projectId: content.projectId, tenantId: req.tenantId, type: content.type, _id: { $ne: id }, isDeleted: false },
+      { isDefault: false },
+      opts
+    );
+    content.isDefault = true;
+    await content.save(opts);
+  });
   
   if (content.projectId) {
     await CacheService.invalidateProject(req.tenantId!.toString(), content.projectId.toString());
@@ -385,7 +403,8 @@ export const publishContent = asyncHandler(async (req: Request, res: Response): 
     );
   } else {
     await content.publish();
-    
+    contentPublishedTotal.labels(req.tenantId!.toString(), content.type).inc();
+
     // Send published notification
     await NotificationService.notifyContentPublished(
       content._id,
@@ -571,7 +590,7 @@ export const restoreVersion = asyncHandler(async (req: Request, res: Response): 
   
   // Save current version first
   if (typeof content.saveVersion === 'function') {
-    await content.saveVersion(req.userId || req.user?._id, `Before restoring to version ${version}`);
+    await content.saveVersion((req.userId || req.user?._id) as string, `Before restoring to version ${version}`);
   }
   
   // Restore data

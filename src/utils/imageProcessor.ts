@@ -4,9 +4,20 @@
  * Uses Sharp library for high-performance image processing
  */
 
-import sharp from 'sharp';
-import path from 'path';
-import fs from 'fs/promises';
+import { AppError } from '../middleware/errorHandler.js';
+
+function getSharp(): any {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('sharp');
+  } catch {
+    throw new AppError(
+      'Image processing is unavailable: optional dependency "sharp" is not installed.',
+      503,
+      'SHARP_NOT_INSTALLED'
+    );
+  }
+}
 
 export interface ImageTransformOptions {
   width?: number;
@@ -38,7 +49,7 @@ export interface TransformationResult {
  * Get image metadata
  */
 export const getImageMetadata = async (input: Buffer | string): Promise<ImageMetadata> => {
-  const image = sharp(input);
+  const image = getSharp()(input);
   const metadata = await image.metadata();
 
   return {
@@ -60,7 +71,7 @@ export const transformImage = async (
   input: Buffer | string,
   options: ImageTransformOptions
 ): Promise<TransformationResult> => {
-  let image = sharp(input);
+  let image = getSharp()(input);
 
   // Resize if dimensions provided
   if (options.width || options.height) {
@@ -93,7 +104,7 @@ export const transformImage = async (
 
   // Get transformed buffer and metadata
   const buffer = await image.toBuffer();
-  const metadata = await sharp(buffer).metadata();
+  const metadata = await getSharp()(buffer).metadata();
 
   return {
     buffer,
@@ -222,11 +233,11 @@ export const cropImage = async (
   width: number,
   height: number
 ): Promise<TransformationResult> => {
-  const buffer = await sharp(input)
+  const buffer = await getSharp()(input)
     .extract({ left, top, width, height })
     .toBuffer();
 
-  const metadata = await sharp(buffer).metadata();
+  const metadata = await getSharp()(buffer).metadata();
 
   return {
     buffer,
@@ -251,14 +262,14 @@ export const addWatermark = async (
   input: Buffer | string,
   watermarkPath: string,
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' = 'bottom-right',
-  opacity: number = 0.5
+  _opacity: number = 0.5
 ): Promise<TransformationResult> => {
-  const watermark = await sharp(watermarkPath)
+  const watermark = await getSharp()(watermarkPath)
     .resize(200) // Resize watermark
     .toBuffer();
 
-  const metadata = await sharp(input).metadata();
-  const watermarkMeta = await sharp(watermark).metadata();
+  const metadata = await getSharp()(input).metadata();
+  const watermarkMeta = await getSharp()(watermark).metadata();
 
   let left = 0;
   let top = 0;
@@ -287,7 +298,7 @@ export const addWatermark = async (
       break;
   }
 
-  const buffer = await sharp(input)
+  const buffer = await getSharp()(input)
     .composite([
       {
         input: watermark,
@@ -298,7 +309,7 @@ export const addWatermark = async (
     ])
     .toBuffer();
 
-  const resultMetadata = await sharp(buffer).metadata();
+  const resultMetadata = await getSharp()(buffer).metadata();
 
   return {
     buffer,
@@ -322,11 +333,11 @@ export const addWatermark = async (
 export const convertToGrayscale = async (
   input: Buffer | string
 ): Promise<TransformationResult> => {
-  const buffer = await sharp(input)
+  const buffer = await getSharp()(input)
     .grayscale()
     .toBuffer();
 
-  const metadata = await sharp(buffer).metadata();
+  const metadata = await getSharp()(buffer).metadata();
 
   return {
     buffer,
@@ -351,11 +362,11 @@ export const blurImage = async (
   input: Buffer | string,
   sigma: number = 10
 ): Promise<TransformationResult> => {
-  const buffer = await sharp(input)
+  const buffer = await getSharp()(input)
     .blur(sigma)
     .toBuffer();
 
-  const metadata = await sharp(buffer).metadata();
+  const metadata = await getSharp()(buffer).metadata();
 
   return {
     buffer,
@@ -378,7 +389,7 @@ export const blurImage = async (
  */
 export const validateImage = async (input: Buffer | string): Promise<boolean> => {
   try {
-    await sharp(input).metadata();
+    await getSharp()(input).metadata();
     return true;
   } catch (error) {
     return false;
@@ -389,7 +400,7 @@ export const validateImage = async (input: Buffer | string): Promise<boolean> =>
  * Get dominant color from image
  */
 export const getDominantColor = async (input: Buffer | string): Promise<string> => {
-  const { dominant } = await sharp(input)
+  const { dominant } = await getSharp()(input)
     .resize(1, 1)
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -406,4 +417,59 @@ export const getDominantColor = async (input: Buffer | string): Promise<string> 
  */
 export const calculateSizeReduction = (originalSize: number, newSize: number): number => {
   return Math.round(((originalSize - newSize) / originalSize) * 100);
+};
+
+// ---------------------------------------------------------------------------
+// Named responsive variants served on demand via GET /api/v1/media/:id
+// e.g. /api/v1/media/<id>?variant=thumb  or  ?w=480&h=320&fit=cover
+// ---------------------------------------------------------------------------
+
+export const IMAGE_VARIANTS = {
+  thumb: { width: 150, height: 150, fit: 'cover' as const },
+  small: { width: 480, fit: 'inside' as const },
+  medium: { width: 1024, fit: 'inside' as const },
+  large: { width: 1920, fit: 'inside' as const },
+};
+
+export type ImageVariantName = keyof typeof IMAGE_VARIANTS;
+
+const MAX_VARIANT_DIMENSION = 2048;
+const VALID_FITS: ImageTransformOptions['fit'][] = ['cover', 'contain', 'fill', 'inside', 'outside'];
+
+/**
+ * Resolve ?variant= / ?w=&h=&fit= query params to transform options.
+ * Returns null when no transformation was requested. Throws AppError(400)
+ * for invalid values so callers get a clean client error.
+ */
+export const resolveImageVariant = (query: Record<string, unknown>): ImageTransformOptions | null => {
+  const { variant, w, h, fit } = query as { variant?: string; w?: string; h?: string; fit?: string };
+
+  if (variant) {
+    if (!(variant in IMAGE_VARIANTS)) {
+      throw new AppError(
+        `Unknown image variant '${variant}'. Valid: ${Object.keys(IMAGE_VARIANTS).join(', ')}`,
+        400,
+        'INVALID_VARIANT'
+      );
+    }
+    return { ...IMAGE_VARIANTS[variant as ImageVariantName] };
+  }
+
+  if (w === undefined && h === undefined) return null;
+
+  const width = w !== undefined ? parseInt(String(w), 10) : undefined;
+  const height = h !== undefined ? parseInt(String(h), 10) : undefined;
+
+  if ((width !== undefined && (!Number.isFinite(width) || width < 1)) ||
+      (height !== undefined && (!Number.isFinite(height) || height < 1))) {
+    throw new AppError('Invalid w/h dimensions — positive integers required', 400, 'INVALID_VARIANT');
+  }
+
+  const requestedFit = typeof fit === 'string' && (VALID_FITS as string[]).includes(fit) ? (fit as ImageTransformOptions['fit']) : 'inside';
+
+  return {
+    width: width === undefined ? undefined : Math.min(width, MAX_VARIANT_DIMENSION),
+    height: height === undefined ? undefined : Math.min(height, MAX_VARIANT_DIMENSION),
+    fit: requestedFit,
+  };
 };

@@ -1,8 +1,7 @@
 import nodemailer from 'nodemailer';
 import { User } from '../models/User.js';
-import { Tenant } from '../models/Tenant.js';
 import { Project } from '../models/Project.js';
-import { ContentType } from '../models/ContentType.js';
+import ContentType from '../models/ContentType.js';
 
 export class OnboardingService {
   private static transporter = nodemailer.createTransport({
@@ -18,8 +17,6 @@ export class OnboardingService {
   static async sendWelcomeEmail(userId: string) {
     const user = await User.findById(userId).populate('tenantId');
     if (!user) return;
-
-    const tenant = user.tenantId as any;
 
     const mailOptions = {
       from: process.env.SMTP_FROM || 'noreply@headlesscms.com',
@@ -50,7 +47,7 @@ export class OnboardingService {
               <p>Your account has been created successfully</p>
             </div>
             <div class="content">
-              <p>Hi ${user.name || 'there'},</p>
+              <p>Hi ${(user as any).fullName || (user as any).firstName || 'there'},</p>
               <p>Welcome to Headless CMS! We're excited to have you on board. Here's everything you need to get started:</p>
               
               <div class="features">
@@ -112,7 +109,7 @@ export class OnboardingService {
       1: {
         subject: 'Getting Started with Headless CMS - Day 1',
         content: `
-          <p>Hi ${user.name || 'there'},</p>
+          <p>Hi ${(user as any).fullName || (user as any).firstName || 'there'},</p>
           <p>Day 1 is here! Let's get you set up with your first project.</p>
           <ul>
             <li>Create a new project in your dashboard</li>
@@ -125,7 +122,7 @@ export class OnboardingService {
       3: {
         subject: 'Tips for Getting the Most Out of Headless CMS',
         content: `
-          <p>Hi ${user.name || 'there'},</p>
+          <p>Hi ${(user as any).fullName || (user as any).firstName || 'there'},</p>
           <p>By now you should have a good grasp of the basics. Here are some pro tips:</p>
           <ul>
             <li><strong>Use Content Types:</strong> Define reusable schemas for your content</li>
@@ -138,7 +135,7 @@ export class OnboardingService {
       7: {
         subject: 'One Week In - How Are You Doing?',
         content: `
-          <p>Hi ${user.name || 'there'},</p>
+          <p>Hi ${(user as any).fullName || (user as any).firstName || 'there'},</p>
           <p>It's been a week since you joined us! We'd love to hear how your experience has been.</p>
           <p>Have questions? Our support team is here to help.</p>
           <p><a href="${process.env.FRONTEND_URL}/dashboard/support">Contact Support</a></p>

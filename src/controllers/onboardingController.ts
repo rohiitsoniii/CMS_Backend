@@ -10,7 +10,7 @@ export class OnboardingController {
       
       await OnboardingService.sendWelcomeEmail(userId);
       
-      res.json({
+      return res.json({
         success: true,
         message: 'Onboarding started. Welcome email sent.',
         nextSteps: [
@@ -21,7 +21,7 @@ export class OnboardingController {
         ]
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
   }
 
@@ -69,17 +69,17 @@ export class OnboardingController {
       const completedSteps = steps.filter(s => s.completed).length;
       const progress = Math.round((completedSteps / steps.length) * 100);
 
-      res.json({
+      return res.json({
         progress,
         steps,
         user: {
-          name: user?.name,
+          name: (user as any)?.name,
           email: user?.email,
           signupDate: user?.createdAt
         }
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
   }
 
@@ -108,9 +108,9 @@ export class OnboardingController {
 
       await Tenant.findByIdAndUpdate(tenantId, { $set: updateFields });
 
-      res.json({ success: true, message: `Step "${step}" marked as complete` });
+      return res.json({ success: true, message: `Step "${step}" marked as complete` });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
   }
 
@@ -119,13 +119,13 @@ export class OnboardingController {
       const tenantId = req.user!.tenantId;
       const userId = req.user!.id;
 
-      const project = await OnboardingService.createSampleProject(tenantId, userId);
+      const project = await OnboardingService.createSampleProject(tenantId.toString(), userId);
 
       await Tenant.findByIdAndUpdate(tenantId, {
         $set: { 'onboarding.projectCreated': true }
       });
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Sample project created',
         project: {
@@ -136,13 +136,13 @@ export class OnboardingController {
         contentTypes: ['Blog Post', 'Product']
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
   }
 
-  static async getQuickStartGuide(req: Request, res: Response) {
+  static async getQuickStartGuide(_req: Request, res: Response) {
     try {
-      res.json({
+      return res.json({
         steps: [
           {
             order: 1,
@@ -195,7 +195,7 @@ export class OnboardingController {
         ]
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
   }
 }

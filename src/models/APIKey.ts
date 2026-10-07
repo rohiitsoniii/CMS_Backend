@@ -7,10 +7,11 @@ export interface IAPIKey extends Document {
   tenantId: mongoose.Types.ObjectId;
   name: string;
   description?: string;
-  apiKey: string; // Public key (shown to user)
-  apiKeyHash: string; // Hashed version stored in DB
-  secretKey: string; // Secret key (shown once)
+  apiKey: string; // Public key identifier (select:false — shown once at creation)
+  apiKeyHash: string; // HMAC-SHA256 lookup key — the ONLY queryable form
+  secretKey: string; // Secret key (select:false — shown once at creation)
   secretKeyHash: string; // Hashed version stored in DB
+  keyPrefix?: string; // Non-secret display hint, e.g. first chars (like Stripe)
   permissions: string[];
   allowedOrigins: string[];
   allowedIps?: string[];
@@ -58,6 +59,7 @@ const apiKeySchema = new Schema<IAPIKey>({
     type: String,
     required: true,
     unique: true,
+    select: false, // never returned by queries unless explicitly selected
   },
   apiKeyHash: {
     type: String,
@@ -72,6 +74,10 @@ const apiKeySchema = new Schema<IAPIKey>({
     type: String,
     required: true,
     select: false,
+  },
+  keyPrefix: {
+    type: String,
+    trim: true,
   },
   permissions: [{
     type: String,
@@ -110,6 +116,7 @@ const apiKeySchema = new Schema<IAPIKey>({
 
 // Indexes
 apiKeySchema.index({ apiKey: 1 });
+apiKeySchema.index({ apiKeyHash: 1 });
 apiKeySchema.index({ tenantId: 1, isActive: 1 });
 apiKeySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

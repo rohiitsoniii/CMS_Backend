@@ -1,4 +1,6 @@
+// @ts-ignore - no declaration files for swagger-jsdoc
 import swaggerJsdoc from 'swagger-jsdoc';
+// @ts-ignore - no declaration files for swagger-ui-express
 import swaggerUi from 'swagger-ui-express';
 import { Router, Request, Response } from 'express';
 import { config } from '../config/index.js';

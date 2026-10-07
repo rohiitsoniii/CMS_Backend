@@ -5,6 +5,7 @@ import { Project, Content, Knowledge } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { config } from '../config/index.js';
 import { AuditService } from '../services/AuditService.js';
+import { escapeSearchTerm } from '../utils/queryBuilder.js';
 
 /**
  * Create a new project
@@ -58,10 +59,11 @@ export const getProjects = asyncHandler(async (req: Request, res: Response): Pro
   const query: Record<string, unknown> = { tenantId: req.tenantId };
   
   if (status) query.status = status;
-  if (search) {
+  if (search && typeof search === 'string') {
+    const term = escapeSearchTerm(search);
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
+      { name: { $regex: term, $options: 'i' } },
+      { description: { $regex: term, $options: 'i' } },
     ];
   }
   

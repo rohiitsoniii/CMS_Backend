@@ -138,7 +138,7 @@ translationQueue.process(async (job: Job<TranslationJobData>) => {
 });
 
 // Log queue events
-translationQueue.on('completed', (job, result) => {
+translationQueue.on('completed', (job, _result) => {
     console.log(`[TranslationWorker] Job ${job.id} completed for content ${job.data.contentId}`);
 });
 

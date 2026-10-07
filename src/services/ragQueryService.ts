@@ -1,7 +1,6 @@
 import { Knowledge, RagBot, RagConversation } from '../models/index.js';
 import { embeddingService } from './embeddingService.js';
 import aiService from './aiService.js';
-import mongoose from 'mongoose';
 
 export class RagQueryService {
   /**

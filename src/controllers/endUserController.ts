@@ -48,7 +48,7 @@ export class EndUserController {
             // Generate JWT
             const token = this.generateToken(user);
 
-            res.status(201).json({
+            return res.status(201).json({
                 success: true,
                 data: {
                     user: {
@@ -63,7 +63,7 @@ export class EndUserController {
                 message: 'User registered successfully. Please check your email to verify your account.',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to register user',
                 error: error.message,
@@ -118,7 +118,7 @@ export class EndUserController {
             // Generate JWT
             const token = this.generateToken(user);
 
-            res.json({
+            return res.json({
                 success: true,
                 data: {
                     user: {
@@ -134,7 +134,7 @@ export class EndUserController {
                 message: 'Login successful',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to login',
                 error: error.message,
@@ -156,12 +156,12 @@ export class EndUserController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: user,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch profile',
                 error: error.message,
@@ -196,13 +196,13 @@ export class EndUserController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: user,
                 message: 'Profile updated successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to update profile',
                 error: error.message,
@@ -239,12 +239,12 @@ export class EndUserController {
             // Send reset email
             await this.sendPasswordResetEmail(user, resetToken);
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'If the email exists, a password reset link has been sent',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to process request',
                 error: error.message,
@@ -279,12 +279,12 @@ export class EndUserController {
             user.passwordResetExpiry = undefined;
             await user.save();
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Password reset successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to reset password',
                 error: error.message,
@@ -317,12 +317,12 @@ export class EndUserController {
             user.emailVerificationToken = undefined;
             await user.save();
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'Email verified successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to verify email',
                 error: error.message,
@@ -354,7 +354,7 @@ export class EndUserController {
 
             const total = await EndUser.countDocuments(filter);
 
-            res.json({
+            return res.json({
                 success: true,
                 data: users,
                 pagination: {
@@ -365,7 +365,7 @@ export class EndUserController {
                 },
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch users',
                 error: error.message,
@@ -387,12 +387,12 @@ export class EndUserController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: user,
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch user',
                 error: error.message,
@@ -418,13 +418,13 @@ export class EndUserController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 data: user,
                 message: 'User suspended successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to suspend user',
                 error: error.message,
@@ -450,12 +450,12 @@ export class EndUserController {
                 });
             }
 
-            res.json({
+            return res.json({
                 success: true,
                 message: 'User deleted successfully',
             });
         } catch (error: any) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: 'Failed to delete user',
                 error: error.message,
@@ -479,7 +479,7 @@ export class EndUserController {
     // Helper: Send verification email
     private async sendVerificationEmail(user: any, token: string) {
         try {
-            const transporter = nodemailer.createTransporter({
+            const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
                 port: parseInt(process.env.SMTP_PORT || '587'),
                 secure: false,
@@ -511,7 +511,7 @@ export class EndUserController {
     // Helper: Send password reset email
     private async sendPasswordResetEmail(user: any, token: string) {
         try {
-            const transporter = nodemailer.createTransporter({
+            const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
                 port: parseInt(process.env.SMTP_PORT || '587'),
                 secure: false,

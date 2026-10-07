@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Tenant } from '../models/Tenant.js';
 import { User } from '../models/User.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -41,7 +42,7 @@ export class SSOService {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to exchange code for tokens');
+      throw new AppError('Failed to exchange code for tokens', 502, 'SSO_EXCHANGE_FAILED');
     }
 
     return response.json();
@@ -58,7 +59,7 @@ export class SSOService {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to get user info');
+      throw new AppError('Failed to get user info', 502, 'SSO_USERINFO_FAILED');
     }
 
     return response.json();
@@ -97,9 +98,9 @@ export class SSOService {
         role: 'owner',
         avatar: googleUser.picture,
         isEmailVerified: true,
-        provider: 'google',
-        providerId: googleUser.id
-      });
+      } as any);
+      (user as any).provider = 'google';
+      (user as any).providerId = googleUser.id;
 
       return { user, isNewUser: true };
     }
@@ -115,10 +116,10 @@ export class SSOService {
     const googleUser = await this.getGoogleUserInfo(tokens.access_token);
 
     const user = await User.findById(userId);
-    if (!user) throw new Error('User not found');
+    if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
 
-    user.provider = 'google';
-    user.providerId = googleUser.id;
+    (user as any).provider = 'google';
+    (user as any).providerId = googleUser.id;
     user.avatar = user.avatar || googleUser.picture;
     await user.save();
 
@@ -127,10 +128,10 @@ export class SSOService {
 
   static async unlinkGoogleAccount(userId: string): Promise<boolean> {
     const user = await User.findById(userId);
-    if (!user) throw new Error('User not found');
+    if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
 
-    user.provider = 'email';
-    user.providerId = undefined;
+    (user as any).provider = 'email';
+    (user as any).providerId = undefined;
     await user.save();
 
     return true;

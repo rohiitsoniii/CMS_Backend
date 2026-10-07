@@ -2,6 +2,61 @@ import { Request, Response, NextFunction } from 'express';
 import { config } from '../config/index.js';
 import { ErrorLog } from '../models/ErrorLog.js';
 
+/**
+ * Keys that must never be persisted to logs (passwords, tokens, secrets).
+ * Matching is case-insensitive and substring-based to catch variants
+ * like `currentPassword`, `api_key`, `X-API-Secret`.
+ */
+const SENSITIVE_KEY_PARTS = [
+  'password',
+  'passwd',
+  'secret',
+  'token',
+  'apikey',
+  'api_key',
+  'api-key',
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'creditcard',
+  'ssn',
+];
+
+const MAX_LOGGED_STRING = 2000;
+const MAX_LOGGED_DEPTH = 4;
+const MAX_LOGGED_KEYS = 50;
+
+/**
+ * Deep-clone request data with sensitive values redacted and sizes capped.
+ * Safe for ErrorLog persistence and console output.
+ */
+export const redactForLog = (value: unknown, depth = 0): unknown => {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') {
+    return value.length > MAX_LOGGED_STRING ? value.slice(0, MAX_LOGGED_STRING) + '…[truncated]' : value;
+  }
+  if (typeof value !== 'object' || depth >= MAX_LOGGED_DEPTH) {
+    return typeof value === 'object' ? '[depth-limit]' : value;
+  }
+  if (Buffer.isBuffer(value)) return `[buffer ${value.length} bytes]`;
+  if (Array.isArray(value)) return value.slice(0, MAX_LOGGED_KEYS).map((v) => redactForLog(v, depth + 1));
+
+  const out: Record<string, unknown> = {};
+  let count = 0;
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (count >= MAX_LOGGED_KEYS) {
+      out.__truncated = true;
+      break;
+    }
+    count += 1;
+    const lower = key.toLowerCase().replace(/[-_]/g, '');
+    out[key] = SENSITIVE_KEY_PARTS.some((part) => lower.includes(part.replace(/[-_]/g, '')))
+      ? '[REDACTED]'
+      : redactForLog(val, depth + 1);
+  }
+  return out;
+};
+
 
 // Custom error class
 export class AppError extends Error {
@@ -101,11 +156,11 @@ export const errorHandler = async (
     console.error('Unexpected error:', err);
   }
 
-  // Phase 6: Log critical errors to database
+  // Phase 6: Log critical errors to database (PII-redacted)
   if (!isOperational || statusCode >= 500) {
     try {
       await ErrorLog.create({
-        message: err.message,
+        message: typeof err.message === 'string' ? err.message.slice(0, 2000) : 'Unknown error',
         stack: err.stack,
         statusCode,
         userId: (req as any).user?._id,
@@ -113,8 +168,8 @@ export const errorHandler = async (
         path: req.path,
         method: req.method,
         requestId: req.requestId,
-        params: req.params,
-        body: req.method !== 'GET' ? req.body : undefined,
+        params: redactForLog(req.params),
+        body: req.method !== 'GET' ? redactForLog(req.body) : undefined,
         severity: statusCode >= 500 ? 'high' : 'medium',
         isOperational
       });
