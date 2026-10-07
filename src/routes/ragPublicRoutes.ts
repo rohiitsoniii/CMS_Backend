@@ -11,5 +11,6 @@ const router = express.Router();
 router.get('/:botSlug/config', ragChatController.getWidgetConfig);
 router.post('/:botSlug/chat', ragChatController.ragChat);
 router.post('/:botSlug/rate', ragChatController.submitFeedback);
+router.post('/:botSlug/lead', ragChatController.captureLead);
 
 export default router;

@@ -19,7 +19,7 @@ import { authenticateAPIKey, apiKeyRateLimiter } from '../middleware/index.js';
 import { validate, body } from '../middleware/validate.js';
 import { cacheResponse } from '../middleware/cache.js';
 import { deliveryRateLimit, deliveryHeavyRateLimit } from '../middleware/deliveryRateLimit.js';
-import { SeoSitemapService } from '../services/seoSitemapService.js';
+import { buildSitemapXml } from '../services/geoService.js';
 import { Project } from '../models/index.js';
 
 const router = Router();
@@ -170,7 +170,7 @@ router.get('/:projectSlug/sitemap.xml', async (req, res) => {
     const project = await Project.findOne({ slug: projectSlug, status: 'active' });
     if (!project) return res.status(404).send('Project not found');
 
-    const xml = await SeoSitemapService.generateSitemap(project._id.toString());
+    const xml = await buildSitemapXml(project._id.toString());
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=1800');
     return res.send(xml);

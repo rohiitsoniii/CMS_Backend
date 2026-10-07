@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { contentEvents } from '../services/contentEvents.js';
 import mongoose from 'mongoose';
 import { Content, Project, ContentTypes } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
@@ -421,6 +422,8 @@ export const publishContent = asyncHandler(async (req: Request, res: Response): 
     await CacheService.invalidateProject(req.tenantId!.toString(), content.projectId.toString());
   }
   
+  if (!scheduledAt) contentEvents.published(content);
+
   await AuditService.log(req, scheduledAt ? 'content.schedule' : 'content.publish', {
     type: 'Content',
     id: String(content._id),
@@ -464,6 +467,8 @@ export const unpublishContent = asyncHandler(async (req: Request, res: Response)
   if (content.projectId) {
     await CacheService.invalidateProject(req.tenantId!.toString(), content.projectId.toString());
   }
+
+  contentEvents.unpublished(content);
 
   await AuditService.log(req, 'content.unpublish', {
     type: 'Content',
@@ -511,6 +516,8 @@ export const deleteContent = asyncHandler(async (req: Request, res: Response): P
     await CacheService.invalidateProject(req.tenantId!.toString(), content.projectId.toString());
   }
   
+  contentEvents.deleted(content);
+
   await AuditService.log(req, 'content.archive', {
     type: 'Content',
     id: String(content._id),

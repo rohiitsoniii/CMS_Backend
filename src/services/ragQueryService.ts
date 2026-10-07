@@ -1,52 +1,57 @@
 import { Knowledge, RagBot, RagConversation } from '../models/index.js';
-import { embeddingService } from './embeddingService.js';
+import { embeddingService, cosineSimilarity } from './embeddingService.js';
 import aiService from './aiService.js';
+import { runWithAIContext } from './aiGateway.js';
+
+const MAX_VECTOR_CANDIDATES = 5000;
 
 export class RagQueryService {
   /**
-   * Retrieves relevant context chunks using semantic (or text) search
+   * Hybrid retrieval: cosine similarity over stored chunk embeddings, topped
+   * up with MongoDB text-search matches (and used alone when no embeddings).
    */
   async retrieveContext(botId: string, query: string, limit: number = 4): Promise<any[]> {
     const bot = await RagBot.findById(botId);
     if (!bot) throw new Error('Bot not found');
 
-    // Generate embedding for query
-    const queryVector = await embeddingService.generateEmbedding(query);
-    
-    let results: any[] = [];
+    const threshold = bot.retrieval?.similarityThreshold ?? 0.2;
+    const base = { projectId: bot.projectId, status: 'active' };
+    const picked = new Map<string, any>();
 
+    const queryVector = await embeddingService.generateEmbedding(query);
     if (queryVector.length > 0) {
-      // SEMANTIC SEARCH (MOCK using existing logic in embeddingService)
-      // In a real Atlas Vector Search system, this would be a $vectorSearch aggregation.
-      // For now we use the same fallback semanticSearch logic from embeddingService
-      results = await Knowledge.find(
-        { 
-          projectId: bot.projectId, 
-          status: 'active',
-          sourceType: { $in: ['document', 'url', 'cms_content', 'manual'] }
-        },
-        { score: { $meta: "textScore" } }
-      )
-      .sort({ score: { $meta: "textScore" } })
-      .limit(limit);
-      
-      // If we have real vectors, we should theoretically filter by cosine similarity.
-      // Since we are mocking Atlas Vector Search, we just return the text matches
-      // but we could rank them if we had a local vector comparison.
-    } else {
-      // Fallback to text search
-      results = await Knowledge.find(
-        { 
-          projectId: bot.projectId, 
-          status: 'active',
-          $text: { $search: query } 
-        },
-        { score: { $meta: "textScore" } }
-      )
-      .sort({ score: { $meta: "textScore" } })
-      .limit(limit);
+      const candidates = await Knowledge.find({ ...base, 'embedding.0': { $exists: true } })
+        .select('question answer sourceType sourceFile sourceUrl embedding')
+        .limit(MAX_VECTOR_CANDIDATES)
+        .lean();
+      candidates
+        .map((c: any) => ({ ...c, score: cosineSimilarity(queryVector, c.embedding || []) }))
+        .filter((c) => c.score >= threshold)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .forEach(({ embedding, ...c }: any) => picked.set(String(c._id), c));
     }
 
+    if (picked.size < limit) {
+      try {
+        const textHits = await Knowledge.find({ ...base, $text: { $search: query } }, { score: { $meta: 'textScore' } })
+          .select('question answer sourceType sourceFile sourceUrl')
+          .sort({ score: { $meta: 'textScore' } })
+          .limit(limit)
+          .lean();
+        for (const hit of textHits) {
+          if (picked.size >= limit) break;
+          if (!picked.has(String(hit._id))) picked.set(String(hit._id), hit);
+        }
+      } catch (err) {
+        console.warn('[rag] text search unavailable:', (err as Error).message);
+      }
+    }
+
+    const results = [...picked.values()];
+    if (results.length) {
+      Knowledge.updateMany({ _id: { $in: results.map((r) => r._id) } }, { $inc: { 'metrics.usageCount': 1 } }).catch(() => undefined);
+    }
     return results;
   }
 
@@ -61,6 +66,16 @@ export class RagQueryService {
   ): Promise<{ message: string; sources: any[] }> {
     const bot = await RagBot.findById(botId);
     if (!bot) throw new Error('Bot not found');
+
+    // Public widget calls carry no login — attribute AI usage to the bot owner
+    return runWithAIContext(
+      { tenantId: String(bot.tenantId), projectId: String(bot.projectId), feature: 'chatbot' },
+      () => this.answer(bot, query, sessionId, history)
+    );
+  }
+
+  private async answer(bot: any, query: string, sessionId: string, history: any[]): Promise<{ message: string; sources: any[] }> {
+    const botId = String(bot._id);
 
     // 1. Retrieve context
     const contextChunks = await this.retrieveContext(botId, query, bot.retrieval?.topK || 4);

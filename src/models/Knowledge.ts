@@ -26,6 +26,8 @@ export interface IKnowledge extends Document {
   sourceFile?: string;
   chunkIndex?: number;
   contentHash?: string;
+  /** CMS entry this chunk was generated from (auto-sync) */
+  sourceContentId?: Types.ObjectId;
   characterCount?: number;
   
   // Vector search
@@ -127,6 +129,7 @@ const KnowledgeSchema = new Schema<IKnowledge>(
     
     sourceUrl: String,
     sourceFile: String,
+    sourceContentId: { type: Schema.Types.ObjectId, ref: 'Content', index: true },
     
     chunkIndex: {
       type: Number,

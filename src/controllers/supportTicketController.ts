@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { SupportTicket } from '../models/SupportTicket';
-import nodemailer from 'nodemailer';
+import { mailerService } from '../services/mailerService.js';
 
 export class SupportTicketController {
     // Get all tickets for a project
@@ -344,18 +344,9 @@ export class SupportTicketController {
     // Helper: Send confirmation email
     private async sendConfirmationEmail(ticket: any) {
         try {
-            const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST || 'smtp.gmail.com',
-                port: parseInt(process.env.SMTP_PORT || '587'),
-                secure: false,
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                },
-            });
-
-            await transporter.sendMail({
-                from: process.env.SMTP_FROM || 'support@example.com',
+                        await mailerService.send({
+                projectId: ticket.projectId, category: 'transactional',
+                throwOnError: true,
                 to: ticket.customerEmail,
                 subject: `Ticket Created: ${ticket.ticketNumber}`,
                 html: `
@@ -381,18 +372,9 @@ export class SupportTicketController {
     // Helper: Notify customer
     private async notifyCustomer(ticket: any, message: string) {
         try {
-            const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST || 'smtp.gmail.com',
-                port: parseInt(process.env.SMTP_PORT || '587'),
-                secure: false,
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                },
-            });
-
-            await transporter.sendMail({
-                from: process.env.SMTP_FROM || 'support@example.com',
+                        await mailerService.send({
+                projectId: ticket.projectId, category: 'transactional',
+                throwOnError: true,
                 to: ticket.customerEmail,
                 subject: `Re: ${ticket.ticketNumber} - ${ticket.subject}`,
                 html: `
@@ -413,18 +395,9 @@ export class SupportTicketController {
     // Helper: Send resolved email
     private async sendResolvedEmail(ticket: any) {
         try {
-            const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST || 'smtp.gmail.com',
-                port: parseInt(process.env.SMTP_PORT || '587'),
-                secure: false,
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                },
-            });
-
-            await transporter.sendMail({
-                from: process.env.SMTP_FROM || 'support@example.com',
+                        await mailerService.send({
+                projectId: ticket.projectId, category: 'transactional',
+                throwOnError: true,
                 to: ticket.customerEmail,
                 subject: `Ticket Resolved: ${ticket.ticketNumber}`,
                 html: `

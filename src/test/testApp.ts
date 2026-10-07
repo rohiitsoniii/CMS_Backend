@@ -7,6 +7,7 @@ import {
   requestIdMiddleware,
 } from '../middleware/index.js';
 import { csrfProtection } from '../middleware/cookies.js';
+import { aiContextMiddleware } from '../services/aiGateway.js';
 
 /**
  * Minimal Express app for tests — same router as production but without
@@ -23,6 +24,7 @@ export const createTestApp = (): Express => {
     if (req.originalUrl === stripeWebhookPath) return next();
     express.json()(req, res, next);
   });
+  app.use(express.urlencoded({ extended: true }));
   app.use(requestIdMiddleware);
   app.use(cookieParser());
   app.use(csrfProtection);
@@ -30,6 +32,7 @@ export const createTestApp = (): Express => {
   app.get(['/live', '/health', '/ready'], (_req, res) => {
     res.status(200).json({ status: 'ok', success: true, timestamp: new Date().toISOString() });
   });
+  app.use('/api/v1', aiContextMiddleware);
   app.use('/api/v1', routes);
   app.use(notFoundHandler);
   app.use(errorHandler);

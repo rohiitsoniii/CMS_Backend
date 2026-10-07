@@ -25,7 +25,10 @@ import { resolvers } from './graphql/resolvers.js';
 import collaborationService from './services/collaborationService.js';
 import { scheduledPublishWorker } from './workers/scheduledPublishWorker.js';
 import { webhookRetryWorker } from './workers/webhookRetryWorker.js';
+import { emailCampaignWorker } from './workers/emailCampaignWorker.js';
 import { checkAPIRateLimit } from './middleware/quotaMiddleware.js';
+import { aiContextMiddleware } from './services/aiGateway.js';
+import { serveEmbedScript } from './utils/embedScripts.js';
 
 // Initialize Express app
 const app = express();
@@ -118,7 +121,16 @@ const startServer = async () => {
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-API-Secret', 'X-CSRF-Token', 'X-Bot-Key'],
     };
-    app.use(cors(corsOptions));
+    // Public, credential-free endpoints are embedded on tenants' own websites
+    // (signup forms, chatbot widget, delivery API) and must accept any origin.
+    // They never read the dashboard session cookie.
+    const PUBLIC_CORS_PREFIXES = ['/api/v1/public/', '/api/v1/bots/', '/api/v1/deliver/'];
+    const publicCors = cors({ origin: true, credentials: false, methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'X-API-Key', 'X-Bot-Key'] });
+    const dashboardCors = cors(corsOptions);
+    app.use((req, res, next) => {
+      const isPublic = PUBLIC_CORS_PREFIXES.some((p) => req.path.startsWith(p));
+      return (isPublic ? publicCors : dashboardCors)(req, res, next);
+    });
 
     // Body Parser — Stripe webhook needs the RAW body for signature
     // verification, so it is exempted here and parsed via express.raw()
@@ -132,6 +144,9 @@ const startServer = async () => {
       if (req.originalUrl === stripeWebhookPath) return next();
       express.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
     });
+
+    // Embed scripts (chat widget, signup form) with this deployment's URLs baked in
+    app.get(['/widget.js', '/subscribe.js'], serveEmbedScript);
 
     // Static Files
     app.use(express.static('public'));
@@ -207,6 +222,8 @@ const startServer = async () => {
     );
 
     // --- REST API API Routes ---
+    // AI context lets every AI call resolve the caller's tenant (BYOK + metering)
+    app.use('/api/v1', aiContextMiddleware);
     app.use('/api/v1', routes);
 
     // --- API Documentation ---
@@ -257,6 +274,7 @@ const startServer = async () => {
     // Boot background workers
     scheduledPublishWorker.start();
     webhookRetryWorker.start();
+    emailCampaignWorker.start();
 
     // Graceful Shutdown Logic
     const shutdown = async (signal: string) => {

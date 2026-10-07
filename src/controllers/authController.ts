@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
+import { mailerService } from '../services/mailerService.js';
 import { Tenant, User, APIKey } from '../models/index.js';
 import { generateTokens, refreshTokens, asyncHandler, AppError } from '../middleware/index.js';
 import { setAuthCookies, clearAuthCookies } from '../middleware/cookies.js';
@@ -285,25 +285,16 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response): P
 const sendPasswordResetEmail = async (to: string, token: string, firstName: string): Promise<void> => {
   const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/reset-password?token=${token}`;
 
-  if (!process.env.SMTP_USER) {
+  if (!mailerService.isPlatformConfigured()) {
     // Never log the email/token — the link is single-use credentials
     console.log('[auth] SMTP not configured — password reset link generated (see user inbox when SMTP is set)');
     return;
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@example.com',
+    await mailerService.send({
+      category: 'system',
+      throwOnError: true,
       to,
       subject: 'Reset your password',
       html: `

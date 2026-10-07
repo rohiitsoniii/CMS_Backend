@@ -47,6 +47,7 @@ router.delete('/:botId/sources', ragIngestionController.deleteSource);
 // Token & Analytics
 router.post('/:botId/api-key', ragBotController.regenerateApiKey);
 router.get('/:botId/analytics', ragBotController.getBotAnalytics);
+router.get('/:botId/unanswered', ragBotController.getUnansweredQuestions);
 router.get('/:botId/embed-code', ragBotController.getEmbedCode);
 
 export default router;

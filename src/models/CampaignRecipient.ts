@@ -1,21 +1,28 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'opened' | 'clicked' | 'bounced' | 'failed' | 'skipped';
+
 export interface ICampaignRecipient extends Document {
     campaignId: mongoose.Types.ObjectId;
     projectId: mongoose.Types.ObjectId;
-    
+    subscriberId?: mongoose.Types.ObjectId;
+
     // Recipient Info
     email: string;
     name?: string;
-    
+
+    /** Opaque per-recipient token used in open/click/unsubscribe links */
+    token: string;
+
     // Tracking
-    status: 'pending' | 'sent' | 'delivered' | 'opened' | 'clicked' | 'bounced' | 'failed';
+    status: RecipientStatus;
     sentAt?: Date;
     deliveredAt?: Date;
     openedAt?: Date;
     clickedAt?: Date;
     bouncedAt?: Date;
-    
+    unsubscribedAt?: Date;
+
     // Engagement
     openCount: number;
     clickCount: number;
@@ -23,80 +30,42 @@ export interface ICampaignRecipient extends Document {
         url: string;
         clickedAt: Date;
     }[];
-    
-    // Error handling
+
+    attempts: number;
     error?: string;
-    
+
     createdAt: Date;
     updatedAt: Date;
 }
 
 const CampaignRecipientSchema = new Schema<ICampaignRecipient>(
     {
-        campaignId: {
-            type: Schema.Types.ObjectId,
-            ref: 'EmailCampaign',
-            required: true,
-            index: true,
-        },
-        projectId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Project',
-            required: true,
-            index: true,
-        },
-        email: {
-            type: String,
-            required: true,
-            trim: true,
-            lowercase: true,
-        },
-        name: {
-            type: String,
-            trim: true,
-        },
+        campaignId: { type: Schema.Types.ObjectId, ref: 'EmailCampaign', required: true },
+        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
+        subscriberId: { type: Schema.Types.ObjectId, ref: 'EmailSubscriber' },
+        email: { type: String, required: true, trim: true, lowercase: true },
+        name: { type: String, trim: true },
+        // sparse: legacy rows created before tracking tokens existed have none
+        token: { type: String, required: true, unique: true, sparse: true },
         status: {
             type: String,
-            enum: ['pending', 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed'],
+            enum: ['pending', 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed', 'skipped'],
             default: 'pending',
-            index: true,
         },
-        sentAt: {
-            type: Date,
-        },
-        deliveredAt: {
-            type: Date,
-        },
-        openedAt: {
-            type: Date,
-        },
-        clickedAt: {
-            type: Date,
-        },
-        bouncedAt: {
-            type: Date,
-        },
-        openCount: {
-            type: Number,
-            default: 0,
-        },
-        clickCount: {
-            type: Number,
-            default: 0,
-        },
+        sentAt: { type: Date },
+        deliveredAt: { type: Date },
+        openedAt: { type: Date },
+        clickedAt: { type: Date },
+        bouncedAt: { type: Date },
+        unsubscribedAt: { type: Date },
+        openCount: { type: Number, default: 0 },
+        clickCount: { type: Number, default: 0 },
         clicks: [{
-            url: {
-                type: String,
-                required: true,
-            },
-            clickedAt: {
-                type: Date,
-                default: Date.now,
-            },
+            url: { type: String, required: true },
+            clickedAt: { type: Date, default: Date.now },
         }],
-        error: {
-            type: String,
-        },
+        attempts: { type: Number, default: 0 },
+        error: { type: String },
     },
     {
         timestamps: true,

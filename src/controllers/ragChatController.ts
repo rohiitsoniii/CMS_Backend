@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { RagBot, RagConversation, Knowledge } from '../models/index.js';
+import { RagBot, RagConversation, Knowledge, Project } from '../models/index.js';
+import { SMTPConfig } from '../models/SMTPConfig.js';
+import { subscribe, sendConfirmationEmail } from '../services/emailMarketingService.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { isOriginAllowed } from '../middleware/apiKeyAuth.js';
 import mongoose from 'mongoose';
@@ -138,4 +140,65 @@ export const submitFeedback = asyncHandler(async (req: Request, res: Response, _
     success: true,
     message: 'Feedback submitted successfully'
   });
+});
+
+/**
+ * Lead capture from the widget: visitor leaves their email → added to the
+ * project's email audience (source "chatbot") and linked to the conversation.
+ * POST /api/v1/bots/:botSlug/lead
+ */
+export const captureLead = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const { botSlug } = req.params;
+  const apiKey = (req.headers['x-bot-key'] as string) || req.body?.apiKey;
+  const { email, name, sessionId, consent } = req.body || {};
+
+  if (!apiKey || typeof apiKey !== 'string') throw new AppError('apiKey is required', 400);
+
+  const bot = await RagBot.findOne({
+    $or: [
+      { slug: botSlug, status: 'active' },
+      { _id: mongoose.isValidObjectId(botSlug) ? botSlug : null, status: 'active' }
+    ]
+  });
+  if (!bot) throw new AppError('Bot not found or inactive', 404);
+  if (bot.apiKey !== apiKey) throw new AppError('Invalid API Key', 401);
+
+  const origin = req.get('origin');
+  if (origin && bot.allowedOrigins?.length > 0 && !isOriginAllowed(origin, bot.allowedOrigins)) {
+    throw new AppError('Origin not allowed', 403);
+  }
+
+  const settings = await SMTPConfig.findOne({ projectId: bot.projectId }).select('doubleOptIn').lean();
+  let result;
+  try {
+    result = await subscribe(
+      bot.projectId,
+      {
+        email,
+        name: typeof name === 'string' ? name : undefined,
+        tags: ['chatbot', bot.slug].filter(Boolean),
+        source: 'chatbot',
+        sourceDetail: bot.name,
+        consentIp: req.ip,
+        consentText: typeof consent === 'string' ? consent : 'Shared email in chatbot widget',
+      },
+      { doubleOptIn: Boolean(settings?.doubleOptIn) }
+    );
+  } catch (err: any) {
+    throw new AppError(err.message, 400);
+  }
+
+  if (typeof sessionId === 'string' && sessionId) {
+    await RagConversation.updateOne(
+      { sessionId, botId: bot._id },
+      { $set: { visitorEmail: result.subscriber.email } }
+    );
+  }
+
+  if (result.needsConfirmation) {
+    const project = await Project.findById(bot.projectId).select('name').lean();
+    sendConfirmationEmail(bot.projectId, result.subscriber, (project as any)?.name || bot.name).catch(() => undefined);
+  }
+
+  res.json({ success: true, data: { needsConfirmation: result.needsConfirmation } });
 });

@@ -83,10 +83,10 @@
   container.id = 'hc-bot-iframe-container';
   
   const iframe = document.createElement('iframe');
-  // Use the React route we created
-  iframe.src = `http://localhost:5173/public/widget/${botId}?apiKey=${apiKey}`; 
-  // In production, baseUrl would be used, but since frontend/backend are on different ports locally:
-  // we'll assume the frontend is reachable at that URL.
+  // __APP_URL__ is filled in by the API server (FRONTEND_URL); data-app overrides it
+  const appUrl = (script.getAttribute('data-app') || '__APP_URL__').replace(/\/+$/, '');
+  iframe.src = appUrl + '/public/widget/' + encodeURIComponent(botId || botSlug) + '?apiKey=' + encodeURIComponent(apiKey);
+  iframe.title = 'Chat';
   
   container.appendChild(iframe);
   document.body.appendChild(bubble);

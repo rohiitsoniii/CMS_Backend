@@ -286,15 +286,16 @@ export const generateSchema = asyncHandler(async (req: Request, res: Response, _
  * Get AI service status
  */
 export const getAIStatus = asyncHandler(async (_req: Request, res: Response, _next: NextFunction): Promise<void> => {
-  const isConfigured = aiService.isConfigured();
+  const availability = await aiService.availability();
   const availableModels = aiService.getAvailableModels();
 
   res.json({
     success: true,
     data: {
-      configured: isConfigured,
+      configured: availability.available,
+      keySource: availability.keySource,
+      provider: availability.provider || null,
       availableModels,
-      provider: 'OpenRouter',
     },
   });
 });

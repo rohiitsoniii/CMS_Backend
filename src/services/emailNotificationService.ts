@@ -1,18 +1,15 @@
-import nodemailer from 'nodemailer';
+import { mailerService } from './mailerService.js';
 import { User } from '../models/User';
 import { Content } from '../models/Content';
 import Workflow from '../models/Workflow';
 
 export class EmailNotificationService {
-  private static transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
+  // Platform mail (CMS account emails) goes through the central mailer
+  private static transporter = {
+    sendMail: (opts: { to: string; subject: string; html: string; text?: string }) =>
+      mailerService.send({ category: 'system', throwOnError: true, to: opts.to, subject: opts.subject, html: opts.html, text: opts.text }),
+    verify: async () => mailerService.isPlatformConfigured(),
+  };
 
   // Send workflow approval request
   static async sendApprovalRequest(workflowId: string, approverId: string, contentId: string) {

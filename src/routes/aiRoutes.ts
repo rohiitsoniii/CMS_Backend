@@ -6,12 +6,20 @@
 
 import express from 'express';
 import * as aiController from '../controllers/aiController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requirePermission } from '../middleware/auth';
+import * as aiSettings from '../controllers/aiSettingsController.js';
 
 const router = express.Router();
 
 // All AI routes require authentication
 router.use(authenticate);
+
+// Bring your own key + usage (tenant level)
+router.get('/settings', aiSettings.getAISettings);
+router.put('/settings', requirePermission('settings:update'), aiSettings.saveAISettings);
+router.post('/settings/test', requirePermission('settings:update'), aiSettings.testAISettings);
+router.delete('/settings', requirePermission('settings:update'), aiSettings.deleteAISettings);
+router.get('/usage', aiSettings.getAIUsage);
 
 // Content generation
 router.post('/generate/schema', aiController.generateSchema);

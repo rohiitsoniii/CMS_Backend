@@ -1,5 +1,5 @@
 /**
- * AI Service using OpenRouter
+ * AI Service
  * 
  * Provides AI-powered features:
  * - Content generation
@@ -9,37 +9,13 @@
  * - Image alt text generation
  */
 
-import axios from 'axios';
+import { aiGateway } from './aiGateway.js';
 
-interface AIServiceConfig {
-  apiKey: string;
-  baseURL: string;
-  defaultModel: string;
-}
-
+/**
+ * Feature layer: prompts for each AI capability. Provider selection (BYOK vs
+ * platform credits), quota enforcement and metering live in aiGateway.
+ */
 class AIService {
-  private config: AIServiceConfig;
-  private client: any;
-
-  constructor() {
-    this.config = {
-      apiKey: process.env.OPENROUTER_API_KEY || '',
-      baseURL: 'https://openrouter.ai/api/v1',
-      // Using free models from OpenRouter
-      defaultModel: 'meta-llama/llama-3.2-3b-instruct:free', // Free model
-    };
-
-    this.client = axios.create({
-      baseURL: this.config.baseURL,
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
-        'X-Title': 'Headless CMS',
-        'Content-Type': 'application/json',
-      },
-    });
-  }
-
   /**
    * Generate content based on a prompt
    */
@@ -48,24 +24,11 @@ class AIService {
     temperature?: number;
     model?: string;
   }): Promise<string> {
-    try {
-      const response = await this.client.post('/chat/completions', {
-        model: options?.model || this.config.defaultModel,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        max_tokens: options?.maxTokens || 1000,
-        temperature: options?.temperature || 0.7,
-      });
-
-      return response.data.choices[0].message.content;
-    } catch (error: any) {
-      console.error('AI Content Generation Error:', error.response?.data || error.message);
-      throw new Error('Failed to generate content');
-    }
+    return aiGateway.chat(prompt, {
+      maxTokens: options?.maxTokens,
+      temperature: options?.temperature ?? 0.7,
+      model: options?.model,
+    });
   }
 
   /**
@@ -349,7 +312,14 @@ Example:
    * Check if API key is configured
    */
   isConfigured(): boolean {
-    return Boolean(this.config.apiKey);
+    return Boolean(process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY);
+  }
+
+  /**
+   * Check availability for the current tenant (their own key or platform credits)
+   */
+  async availability() {
+    return aiGateway.isAvailable();
   }
 
   /**

@@ -1,11 +1,11 @@
 import { Request, Response } from 'express';
+import { buildSitemapXml } from '../services/geoService.js';
 import { SeoReport } from '../models/SeoReport';
 import { RobotsConfig } from '../models/RobotsConfig';
 import { SeoAuditReport } from '../models/SeoAuditReport';
 import { Content } from '../models/Content';
 import { Project } from '../models/Project';
 import { SeoAnalysisService } from '../services/seoAnalysisService';
-import { SeoSitemapService } from '../services/seoSitemapService';
 import { seoAuditService } from '../services/seoAuditService';
 import { KeywordRank } from '../models/KeywordRank';
 import aiService from '../services/aiService';
@@ -113,7 +113,7 @@ export const seoController = {
   getSitemap: async (req: Request, res: Response): Promise<any> => {
     try {
       const { projectId } = req.params;
-      const xml = await SeoSitemapService.generateSitemap(projectId);
+      const xml = await buildSitemapXml(projectId);
       res.header('Content-Type', 'application/xml');
       return res.status(200).send(xml);
     } catch (error: any) {

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { TeamMember } from '../models/TeamMember';
 import { Role } from '../models/Role';
-import nodemailer from 'nodemailer';
+import { mailerService } from '../services/mailerService.js';
 
 export class TeamMemberController {
     // Get all team members for a project
@@ -448,20 +448,11 @@ export class TeamMemberController {
     // Helper: Send invitation email
     private async sendInvitationEmail(member: any, token: string) {
         try {
-            const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST || 'smtp.gmail.com',
-                port: parseInt(process.env.SMTP_PORT || '587'),
-                secure: false,
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                },
-            });
-
             const invitationUrl = `${process.env.FRONTEND_URL}/accept-invite?token=${token}`;
 
-            await transporter.sendMail({
-                from: process.env.SMTP_FROM || 'noreply@example.com',
+            await mailerService.send({
+                category: 'system',
+                throwOnError: true,
                 to: member.email,
                 subject: 'You\'ve been invited to join a team',
                 html: `

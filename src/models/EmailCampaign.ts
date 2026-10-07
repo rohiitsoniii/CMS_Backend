@@ -1,37 +1,42 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'paused' | 'cancelled' | 'failed';
+
 export interface IEmailCampaign extends Document {
     projectId: mongoose.Types.ObjectId;
-    
-    // Campaign Details
+    tenantId?: mongoose.Types.ObjectId;
+
+    // Campaign Info
     name: string;
     subject: string;
+    previewText?: string;
     templateId?: mongoose.Types.ObjectId;
     htmlContent: string;
     textContent?: string;
-    
-    // Recipients
-    recipientType: 'all' | 'segment' | 'custom';
+
+    // Audience: everyone subscribed, a saved segment, quick tag filter, or a pasted list
+    recipientType: 'all' | 'segment' | 'tags' | 'custom';
+    segmentId?: mongoose.Types.ObjectId;
     recipientSegment?: {
-        contentType?: string;
         tags?: string[];
-        customQuery?: any;
     };
     customRecipients?: string[];
-    
-    // Scheduling
-    status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'paused' | 'cancelled';
+
+    // Status
+    status: CampaignStatus;
     scheduledFor?: Date;
+    startedAt?: Date;
     sentAt?: Date;
-    
+    lastError?: string;
+
     // Settings
     fromName: string;
-    fromEmail: string;
+    fromEmail?: string;
     replyTo?: string;
     trackOpens: boolean;
     trackClicks: boolean;
-    
-    // Statistics
+
+    // Statistics (opened/clicked are unique per recipient)
     stats: {
         totalRecipients: number;
         sent: number;
@@ -42,7 +47,7 @@ export interface IEmailCampaign extends Document {
         unsubscribed: number;
         failed: number;
     };
-    
+
     createdBy: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -50,84 +55,38 @@ export interface IEmailCampaign extends Document {
 
 const EmailCampaignSchema = new Schema<IEmailCampaign>(
     {
-        projectId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Project',
-            required: true,
-            index: true,
-        },
-        name: {
-            type: String,
-            required: true,
-            trim: true,
-        },
-        subject: {
-            type: String,
-            required: true,
-            trim: true,
-        },
-        templateId: {
-            type: Schema.Types.ObjectId,
-            ref: 'EmailTemplate',
-        },
-        htmlContent: {
-            type: String,
-            required: true,
-        },
-        textContent: {
-            type: String,
-        },
+        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+        tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', index: true },
+        name: { type: String, required: true, trim: true, maxlength: 200 },
+        subject: { type: String, required: true, trim: true, maxlength: 300 },
+        previewText: { type: String, trim: true, maxlength: 300 },
+        templateId: { type: Schema.Types.ObjectId, ref: 'EmailTemplate' },
+        htmlContent: { type: String, required: true },
+        textContent: { type: String },
         recipientType: {
             type: String,
-            enum: ['all', 'segment', 'custom'],
+            enum: ['all', 'segment', 'tags', 'custom'],
             default: 'all',
         },
+        segmentId: { type: Schema.Types.ObjectId, ref: 'EmailSegment' },
         recipientSegment: {
-            contentType: String,
             tags: [String],
-            customQuery: Schema.Types.Mixed,
         },
-        customRecipients: [{
-            type: String,
-            trim: true,
-            lowercase: true,
-        }],
+        customRecipients: [{ type: String, trim: true, lowercase: true }],
         status: {
             type: String,
-            enum: ['draft', 'scheduled', 'sending', 'sent', 'paused', 'cancelled'],
+            enum: ['draft', 'scheduled', 'sending', 'sent', 'paused', 'cancelled', 'failed'],
             default: 'draft',
-            index: true,
         },
-        scheduledFor: {
-            type: Date,
-        },
-        sentAt: {
-            type: Date,
-        },
-        fromName: {
-            type: String,
-            required: true,
-            trim: true,
-        },
-        fromEmail: {
-            type: String,
-            required: true,
-            trim: true,
-            lowercase: true,
-        },
-        replyTo: {
-            type: String,
-            trim: true,
-            lowercase: true,
-        },
-        trackOpens: {
-            type: Boolean,
-            default: true,
-        },
-        trackClicks: {
-            type: Boolean,
-            default: true,
-        },
+        scheduledFor: { type: Date },
+        startedAt: { type: Date },
+        sentAt: { type: Date },
+        lastError: { type: String },
+        fromName: { type: String, required: true, trim: true },
+        fromEmail: { type: String, trim: true, lowercase: true },
+        replyTo: { type: String, trim: true, lowercase: true },
+        trackOpens: { type: Boolean, default: true },
+        trackClicks: { type: Boolean, default: true },
         stats: {
             totalRecipients: { type: Number, default: 0 },
             sent: { type: Number, default: 0 },
@@ -138,11 +97,7 @@ const EmailCampaignSchema = new Schema<IEmailCampaign>(
             unsubscribed: { type: Number, default: 0 },
             failed: { type: Number, default: 0 },
         },
-        createdBy: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-        },
+        createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     },
     {
         timestamps: true,
@@ -152,6 +107,6 @@ const EmailCampaignSchema = new Schema<IEmailCampaign>(
 // Indexes
 EmailCampaignSchema.index({ projectId: 1, status: 1 });
 EmailCampaignSchema.index({ projectId: 1, createdAt: -1 });
-EmailCampaignSchema.index({ scheduledFor: 1 });
+EmailCampaignSchema.index({ status: 1, scheduledFor: 1 });
 
 export const EmailCampaign = mongoose.model<IEmailCampaign>('EmailCampaign', EmailCampaignSchema);

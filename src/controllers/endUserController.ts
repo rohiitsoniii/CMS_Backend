@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { EndUser } from '../models/EndUser';
 import jwt from 'jsonwebtoken';
-import nodemailer from 'nodemailer';
+import { mailerService } from '../services/mailerService.js';
 
 export class EndUserController {
     // Register new end user (PUBLIC)
@@ -479,20 +479,13 @@ export class EndUserController {
     // Helper: Send verification email
     private async sendVerificationEmail(user: any, token: string) {
         try {
-            const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST || 'smtp.gmail.com',
-                port: parseInt(process.env.SMTP_PORT || '587'),
-                secure: false,
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                },
-            });
-
             const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
 
-            await transporter.sendMail({
-                from: process.env.SMTP_FROM || 'noreply@example.com',
+            // End-user mail goes through the project's own SMTP when configured
+            await mailerService.send({
+                projectId: user.projectId,
+                category: 'transactional',
+                throwOnError: true,
                 to: user.email,
                 subject: 'Verify your email address',
                 html: `
@@ -511,20 +504,12 @@ export class EndUserController {
     // Helper: Send password reset email
     private async sendPasswordResetEmail(user: any, token: string) {
         try {
-            const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST || 'smtp.gmail.com',
-                port: parseInt(process.env.SMTP_PORT || '587'),
-                secure: false,
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                },
-            });
-
             const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-            await transporter.sendMail({
-                from: process.env.SMTP_FROM || 'noreply@example.com',
+            await mailerService.send({
+                projectId: user.projectId,
+                category: 'transactional',
+                throwOnError: true,
                 to: user.email,
                 subject: 'Reset your password',
                 html: `

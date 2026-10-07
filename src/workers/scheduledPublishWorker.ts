@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { Content } from '../models/index.js';
 import { webhookService } from '../services/webhookService.js';
+import { contentEvents } from '../services/contentEvents.js';
 
 /**
  * Worker that runs every minute to publish or unpublish scheduled content.
@@ -46,6 +47,9 @@ class ScheduledPublishWorker {
                         }
                     ).catch((err: any) => console.error("Webhook failed to trigger", err));
                     
+                    // Chatbot knowledge + search engine ping (webhook already sent above)
+                    contentEvents.published(item, { webhook: false });
+
                     console.log(`[Worker] Auto-Published content: ${item.slug}`);
                  }
             }
@@ -71,6 +75,8 @@ class ScheduledPublishWorker {
                              slug: item.slug
                         }
                     ).catch((err: any) => console.error("Webhook failed to trigger", err));
+
+                    contentEvents.unpublished(item, { webhook: false });
 
                     console.log(`[Worker] Auto-Unpublished content: ${item.slug}`);
                  }

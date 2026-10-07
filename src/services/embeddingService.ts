@@ -1,42 +1,29 @@
-import axios from 'axios';
 import { Content } from '../models/index.js';
 import mongoose from 'mongoose';
+import { aiGateway } from './aiGateway.js';
+
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (!a.length || a.length !== b.length) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
+}
 
 export class EmbeddingService {
-  private config = {
-    apiKey: process.env.OPENROUTER_API_KEY || '',
-    baseURL: 'https://openrouter.ai/api/v1',
-    // Using a low cost or free embedding model from OpenRouter if available, or fallback text-embedding model
-    model: 'nomic-ai/nomic-embed-text-v1.5' // Supported free embedding format API
-  };
-
   /**
-   * Generate an embedding vector for a given text string
+   * Generate an embedding vector for a given text string.
+   * Returns [] when no embedding provider is available — callers fall back
+   * to keyword search. (Never returns fake vectors.)
    */
   async generateEmbedding(text: string): Promise<number[]> {
-    if (!this.config.apiKey) {
-       console.warn('OPENROUTER_API_KEY missing - skipping embedding generation.');
-       return [];
-    }
-    
-    try {
-      // Mocking the embedding call structurally but using the real Endpoint if configured
-      // Note: OpenRouter doesn't standardize embeddings perfectly yet, so we emulate an OpenAI compatible `/embeddings` call
-      const response = await axios.post(`${this.config.baseURL}/embeddings`, {
-        model: this.config.model,
-        input: text
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      return response.data.data[0].embedding;
-    } catch (error) {
-      console.warn('Failed to generate embedding vector:', error);
-      // Return synthetic vector for demonstration where real AI is blocked
-      return Array.from({ length: 768 }, () => Math.random() - 0.5); 
-    }
+    if (!text?.trim()) return [];
+    return aiGateway.embed(text);
   }
 
   /**
@@ -45,47 +32,46 @@ export class EmbeddingService {
   async embedContent(contentId: string): Promise<void> {
     const content = await Content.findById(contentId);
     if (!content) return;
-    
+
     const textToEmbed = `${content.name} ${JSON.stringify(content.data)}`;
     const vector = await this.generateEmbedding(textToEmbed);
-    
+
     if (vector.length > 0) {
-       // Typically stored in a vectorDB or Atlas Vector Search.
-       // For this implementation, we store it softly in the meta object to avoid schema crashes
-       content.meta = content.meta || ({} as any);
-       (content.meta as any).embedding = vector;
-       // Skip validation to ensure we just save the vector blindly
-       await content.save({ validateBeforeSave: false });
+      content.meta = content.meta || ({} as any);
+      (content.meta as any).embedding = vector;
+      await content.save({ validateBeforeSave: false });
     }
   }
 
   /**
-   * Perform semantic search using MongoDB's aggregation pipeline (Vector Search mock)
+   * Semantic search over a project's content: cosine similarity on stored
+   * vectors, falling back to MongoDB text search.
    */
   async semanticSearch(projectId: string, query: string, limit: number = 10): Promise<any[]> {
-    // Generate embedding for search query
     const queryVector = await this.generateEmbedding(query);
-    if (queryVector.length === 0) return [];
+    const pid = new mongoose.Types.ObjectId(projectId);
 
-    // NOTE: True Semantic search requires MongoDB Atlas Vector Search ($vectorSearch).
-    // Assuming standard MongoDB for this demo, we simulate the retrieval by doing a text search
-    // but in a real enterprise setup, this will hit Atlas or Pinecone using the `queryVector`.
-    
-    console.log(`[Semantic Search Mock] Generated ${queryVector.length}d vector for query: ${query}`);
-    
-    // Fallback to text search for local environments without Atlas setup
+    if (queryVector.length > 0) {
+      const candidates = await Content.find({ projectId: pid, isDeleted: { $ne: true }, 'meta.embedding.0': { $exists: true } })
+        .limit(5000)
+        .lean();
+      const scored = candidates
+        .map((doc: any) => ({ ...doc, semanticScore: cosineSimilarity(queryVector, doc.meta?.embedding || []) }))
+        .filter((d) => d.semanticScore > 0)
+        .sort((a, b) => b.semanticScore - a.semanticScore)
+        .slice(0, limit)
+        .map(({ meta, ...rest }: any) => ({ ...rest, meta: { ...meta, embedding: undefined } }));
+      if (scored.length) return scored;
+    }
+
     const results = await Content.find(
-       { projectId: new mongoose.Types.ObjectId(projectId), $text: { $search: query } },
-       { score: { $meta: "textScore" } }
+      { projectId: pid, $text: { $search: query } },
+      { score: { $meta: 'textScore' } }
     )
-    .sort({ score: { $meta: "textScore" } })
-    .limit(limit);
+      .sort({ score: { $meta: 'textScore' } })
+      .limit(limit);
 
-    // We augment the response with a mock 'semanticScore'
-    return results.map(doc => ({
-       ...doc.toObject(),
-       semanticScore: Math.random() * 0.5 + 0.5 // mock 0.5-1.0 score
-    }));
+    return results.map((doc) => ({ ...doc.toObject(), semanticScore: null }));
   }
 }
 

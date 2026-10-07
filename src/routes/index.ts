@@ -46,6 +46,11 @@ import gdprRoutes from './gdprRoutes.js';
 import ragBotRoutes from './ragBotRoutes.js';
 import ragPublicRoutes from './ragPublicRoutes.js';
 import seoRoutes from './seoRoutes.js';
+import emailRoutes from './emailRoutes.js';
+import emailPublicRoutes from './emailPublicRoutes.js';
+import seoPublicRoutes from './seoPublicRoutes.js';
+import aiRoutes from './aiRoutes.js';
+import searchRoutes from './searchRoutes.js';
 import { getJob } from '../controllers/jobStatusController.js';
 
 
@@ -116,6 +121,15 @@ router.use('/projects/:projectId/rag-bots', ragBotRoutes);
 
 // SEO (mounted under projects)
 router.use('/projects', seoRoutes);
+
+// Email marketing: BYO SMTP, audience, segments, campaigns, templates
+router.use('/projects/:projectId/email', emailRoutes);
+
+// Content search (Elasticsearch with MongoDB fallback)
+router.use('/projects/:projectId/search', searchRoutes);
+
+// AI assistant (BYOK-aware, metered)
+router.use('/ai', aiRoutes);
 
 // Media (global for tenant)
 router.use('/admin/media', mediaRoutes);
@@ -232,6 +246,14 @@ router.post('/projects/:projectId/import/validate', authenticateJWT, requirePerm
 // Public Delivery API
 // ============================
 router.use('/deliver', deliveryRoutes);
+
+// ============================
+// Public email: signup forms, confirm, unsubscribe, tracking
+// ============================
+router.use('/public/email', emailPublicRoutes);
+
+// Public SEO: sitemap, robots (AI crawlers), llms.txt, redirects, meta bundles
+router.use('/public/seo', seoPublicRoutes);
 
 // ============================
 // Public RAG Bot Widget API

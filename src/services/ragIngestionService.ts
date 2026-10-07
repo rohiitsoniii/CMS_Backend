@@ -5,7 +5,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 // @ts-ignore
 import pdf from 'pdf-parse';
-import { Knowledge, Content } from '../models/index.js';
+import { Knowledge, Content, RagBot } from '../models/index.js';
 import { embeddingService } from './embeddingService.js';
 import mongoose from 'mongoose';
 
@@ -208,48 +208,96 @@ export class RagIngestionService {
   }
 
   /**
-   * Ingest CMS Content
+   * Ingest all published CMS content of a project (manual "Sync all").
    */
-  async ingestCmsContent(projectId: string, bot: any): Promise<{ entriesProcessed: number }> {
-    const contents = await Content.find({ 
+  async ingestCmsContent(projectId: string, _bot?: any): Promise<{ entriesProcessed: number }> {
+    const contents = await Content.find({
       projectId: new mongoose.Types.ObjectId(projectId),
-      status: 'published' 
+      status: 'published',
+      isDeleted: { $ne: true },
     });
 
     let count = 0;
     for (const item of contents) {
-      const text = `${item.name}. ${JSON.stringify(item.data)}`;
-      const contentHash = crypto.createHash('md5').update(text).digest('hex');
-
-      // Check for duplicates
-      const existing = await Knowledge.findOne({ 
-        projectId: bot.projectId, 
-        contentHash,
-        sourceType: 'cms_content' 
-      });
-      
-      if (existing) continue;
-
-      const embedding = await embeddingService.generateEmbedding(text);
-
-      await Knowledge.create({
-        projectId: bot.projectId,
-        tenantId: bot.tenantId,
-        question: `CMS Content: ${item.name}`,
-        answer: text,
-        sourceType: 'cms_content',
-        contentHash,
-        characterCount: text.length,
-        embedding: embedding,
-        category: 'cms',
-        status: 'active',
-        createdBy: bot.createdBy,
-      });
-      count++;
+      if (await this.syncContentItem(item, { force: false })) count++;
     }
-
     return { entriesProcessed: count };
   }
+
+  /**
+   * Keep chatbot knowledge in step with one CMS entry: replaces the entry's
+   * chunks when its text changed. Returns true when chunks were (re)written.
+   * Only runs for projects that have at least one chatbot.
+   */
+  async syncContentItem(content: any, opts: { force?: boolean } = {}): Promise<boolean> {
+    if (!content?.projectId) return false;
+    const hasBot = await RagBot.exists({ projectId: content.projectId, status: { $ne: 'paused' } });
+    if (!hasBot) return false;
+
+    const text = contentToText(content);
+    if (text.length < 20) {
+      await this.removeContentKnowledge(content._id);
+      return false;
+    }
+    const contentHash = crypto.createHash('md5').update(text).digest('hex');
+
+    if (!opts.force) {
+      const current = await Knowledge.findOne({ sourceContentId: content._id, contentHash }).select('_id').lean();
+      if (current) return false;
+    }
+
+    const chunks = this.chunkText(text);
+    const docs = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const embedding = await embeddingService.generateEmbedding(chunks[i]);
+      docs.push({
+        projectId: content.projectId,
+        tenantId: content.tenantId,
+        question: `${content.name}${chunks.length > 1 ? ` (part ${i + 1})` : ''}`,
+        answer: chunks[i],
+        sourceType: 'cms_content',
+        sourceContentId: content._id,
+        sourceUrl: content.slug ? `/${content.slug}` : undefined,
+        chunkIndex: i,
+        contentHash,
+        characterCount: chunks[i].length,
+        embedding,
+        category: content.contentTypeApiId || content.type || 'cms',
+        status: 'active',
+        createdBy: content.updatedBy || content.createdBy,
+      });
+    }
+
+    await Knowledge.deleteMany({ sourceContentId: content._id });
+    if (docs.length) await Knowledge.insertMany(docs, { ordered: false });
+    return true;
+  }
+
+  async removeContentKnowledge(contentId: any): Promise<void> {
+    await Knowledge.deleteMany({ sourceContentId: contentId });
+  }
+}
+
+/** Flatten a content entry's fields into readable plain text. */
+export function contentToText(content: any): string {
+  const parts: string[] = [content.name];
+  const walk = (v: any, depth: number) => {
+    if (depth > 6 || v === null || v === undefined) return;
+    if (typeof v === 'string') {
+      // Skip URLs/ids/colours — they add noise, not meaning
+      if (/^(https?:\/\/|#[0-9a-f]{3,8}$|[0-9a-f]{24}$)/i.test(v.trim())) return;
+      const plain = cheerio.load(v).text().replace(/\s+/g, ' ').trim();
+      if (plain) parts.push(plain);
+    } else if (Array.isArray(v)) {
+      v.forEach((x) => walk(x, depth + 1));
+    } else if (typeof v === 'object') {
+      Object.values(v).forEach((x) => walk(x, depth + 1));
+    }
+    // bare numbers/booleans add no meaning on their own
+  };
+  walk(content.data, 0);
+  if (content.seo?.metaDescription) parts.push(content.seo.metaDescription);
+  return [...new Set(parts)].join('\n').slice(0, 50_000);
 }
 
 export const ragIngestionService = new RagIngestionService();

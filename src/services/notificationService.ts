@@ -3,9 +3,8 @@ import { User, Content } from '../models/index.js';
 import { TeamMember } from '../models/TeamMember.js';
 import Workflow from '../models/Workflow.js';
 import { Notification } from '../models/Notification.js';
-import { SMTPConfig } from '../models/SMTPConfig.js';
+import { mailerService } from './mailerService.js';
 import { config } from '../config/index.js';
-import nodemailer from 'nodemailer';
 import collaborationService from './collaborationService.js';
 
 interface EmailData {
@@ -20,50 +19,18 @@ interface EmailData {
  */
 export class NotificationService {
   /**
-   * Send email using Nodemailer and SMTP config
+   * Send a notification email to a CMS team member.
+   * Internal notifications always use the platform mail server — never
+   * another tenant's SMTP config.
    */
-  private static async sendEmail(data: EmailData, _tenantId?: string): Promise<void> {
+  private static async sendEmail(data: EmailData, _tenantId?: unknown): Promise<void> {
     try {
-      // Find SMTP config for the project/tenant
-      // For now, using a simplified lookup. In production, this would be optimized.
-      const smtpConfig = await SMTPConfig.findOne({ isActive: true }); // Simplified for demo
-      
-      let transporter;
-      
-      if (smtpConfig && smtpConfig.provider === 'custom' && smtpConfig.smtp) {
-        transporter = nodemailer.createTransport({
-          host: smtpConfig.smtp.host,
-          port: smtpConfig.smtp.port,
-          secure: smtpConfig.smtp.secure,
-          auth: {
-            user: smtpConfig.smtp.auth.user,
-            pass: smtpConfig.smtp.auth.pass,
-          },
-        });
-      } else {
-        // Fallback to system/dummy transporter
-        console.log('📧 No active custom SMTP config. Using system fallback.');
-        console.log('📧 Email notification:', {
-          to: data.to,
-          subject: data.subject,
-        });
-        return;
-      }
-
-      const mailOptions = {
-        from: `"${smtpConfig.fromName}" <${smtpConfig.fromEmail}>`,
+      await mailerService.send({
+        category: 'system',
         to: data.to,
         subject: data.subject,
         html: data.html,
-      };
-
-      const info = await transporter.sendMail(mailOptions);
-      console.log('✅ Email sent: %s', info.messageId);
-
-      if ((smtpConfig as any).provider === 'system') {
-        smtpConfig.incrementDailyCount();
-        await smtpConfig.save();
-      }
+      });
     } catch (error) {
       console.error('❌ Error sending email:', error);
     }

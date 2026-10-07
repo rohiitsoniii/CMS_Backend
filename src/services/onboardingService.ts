@@ -1,18 +1,15 @@
-import nodemailer from 'nodemailer';
+import { mailerService } from './mailerService.js';
 import { User } from '../models/User.js';
 import { Project } from '../models/Project.js';
 import ContentType from '../models/ContentType.js';
 
 export class OnboardingService {
-  private static transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
+  // Platform mail (CMS account emails) goes through the central mailer
+  private static transporter = {
+    sendMail: (opts: { to: string; subject: string; html: string; text?: string }) =>
+      mailerService.send({ category: 'system', throwOnError: true, to: opts.to, subject: opts.subject, html: opts.html, text: opts.text }),
+    verify: async () => mailerService.isPlatformConfigured(),
+  };
 
   static async sendWelcomeEmail(userId: string) {
     const user = await User.findById(userId).populate('tenantId');

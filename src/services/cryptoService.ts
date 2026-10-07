@@ -12,8 +12,19 @@ import * as crypto from 'crypto';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96 bits — recommended for GCM
 
+let warnedDevKey = false;
+
 function getKey(): Buffer {
     const keyHex = process.env.ENCRYPTION_KEY;
+    if ((!keyHex || keyHex.length !== 64) && process.env.NODE_ENV !== 'production') {
+        // Dev/test convenience: derive a stable key so encrypted settings
+        // (SMTP passwords, AI keys) work without extra setup. Never in prod.
+        if (!warnedDevKey) {
+            console.warn('⚠️ ENCRYPTION_KEY not set — using a key derived from JWT_SECRET (development only).');
+            warnedDevKey = true;
+        }
+        return crypto.createHash('sha256').update(`dev-enc:${process.env.JWT_SECRET || 'dev'}`).digest();
+    }
     if (!keyHex || keyHex.length !== 64) {
         throw new Error(
             'ENCRYPTION_KEY environment variable must be a 64-character hex string (32 bytes). ' +
