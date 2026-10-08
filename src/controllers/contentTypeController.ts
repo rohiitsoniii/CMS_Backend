@@ -5,6 +5,13 @@ import { IFieldDefinition } from '../types/fieldTypes';
 import { v4 as uuidv4 } from 'uuid';
 import { asyncHandler, AppError } from '../middleware/index.js';
 
+
+/** Content types are addressed by apiId in the API and by _id in the dashboard; accept both. */
+const byIdOrApiId = (tenantId: unknown, idOrApiId: string) => ({
+  tenantId,
+  $or: [{ apiId: idOrApiId }, ...(mongoose.Types.ObjectId.isValid(idOrApiId) ? [{ _id: idOrApiId }] : [])],
+});
+
 /**
  * ContentType Controller
  * Handles CRUD operations for content types
@@ -75,7 +82,11 @@ export const getContentType = asyncHandler(async (req: Request, res: Response): 
  * @access  Private
  */
 export const createContentType = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { name, apiId, description, displayField, fields, icon, category } = req.body;
+  const { name, description, displayField, fields, icon, category } = req.body;
+  // Derive an apiId ("Blog Post" -> "blogPost") when the client only sends a name
+  const apiId: string | undefined = req.body.apiId || (typeof name === 'string'
+    ? name.trim().replace(/[^A-Za-z0-9]+(.)?/g, (_m: string, c?: string) => (c ? c.toUpperCase() : '')).replace(/^[^A-Za-z]+/, '').replace(/^./, (c) => c.toLowerCase())
+    : undefined);
   const tenantId = req.user?.tenantId;
   const userId = req.user?._id;
 
@@ -156,7 +167,7 @@ export const updateContentType = asyncHandler(async (req: Request, res: Response
     throw new AppError('Unauthorized', 401);
   }
 
-  const contentType = await ContentType.findOne({ tenantId, apiId });
+  const contentType = await ContentType.findOne(byIdOrApiId(tenantId, apiId));
 
   if (!contentType) {
     throw new AppError('Content type not found', 404);
@@ -206,7 +217,7 @@ export const deleteContentType = asyncHandler(async (req: Request, res: Response
     throw new AppError('Unauthorized', 401);
   }
 
-  const contentType = await ContentType.findOne({ tenantId, apiId });
+  const contentType = await ContentType.findOne(byIdOrApiId(tenantId, apiId));
 
   if (!contentType) {
     throw new AppError('Content type not found', 404);
@@ -244,7 +255,7 @@ export const addField = asyncHandler(async (req: Request, res: Response): Promis
     throw new AppError('Unauthorized', 401);
   }
 
-  const contentType = await ContentType.findOne({ tenantId, apiId });
+  const contentType = await ContentType.findOne(byIdOrApiId(tenantId, apiId));
 
   if (!contentType) {
     throw new AppError('Content type not found', 404);
@@ -309,7 +320,7 @@ export const updateField = asyncHandler(async (req: Request, res: Response): Pro
     throw new AppError('Unauthorized', 401);
   }
 
-  const contentType = await ContentType.findOne({ tenantId, apiId });
+  const contentType = await ContentType.findOne(byIdOrApiId(tenantId, apiId));
 
   if (!contentType) {
     throw new AppError('Content type not found', 404);
@@ -354,7 +365,7 @@ export const deleteField = asyncHandler(async (req: Request, res: Response): Pro
     throw new AppError('Unauthorized', 401);
   }
 
-  const contentType = await ContentType.findOne({ tenantId, apiId });
+  const contentType = await ContentType.findOne(byIdOrApiId(tenantId, apiId));
 
   if (!contentType) {
     throw new AppError('Content type not found', 404);
@@ -409,7 +420,7 @@ export const reorderFields = asyncHandler(async (req: Request, res: Response): P
     throw new AppError('fieldOrder must be an array of field IDs', 400);
   }
 
-  const contentType = await ContentType.findOne({ tenantId, apiId });
+  const contentType = await ContentType.findOne(byIdOrApiId(tenantId, apiId));
 
   if (!contentType) {
     throw new AppError('Content type not found', 404);

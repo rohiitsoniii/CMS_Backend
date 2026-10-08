@@ -1,6 +1,8 @@
 import { WebhookLog } from '../models/WebhookLog.js';
 import Webhook from '../models/Webhook.js';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
+import { safePost } from '../utils/safeFetch.js';
 
 export class WebhookLogService {
   static async createLog(data: {
@@ -84,42 +86,44 @@ export class WebhookLogService {
     .populate('triggeredBy', 'name email');
   }
 
-  static async retryWebhook(logId: string): Promise<any> {
-    const log = await WebhookLog.findById(logId);
+  /** Re-send a logged delivery. Scoped to the tenant, signed, and SSRF-safe. */
+  static async retryWebhook(logId: string, tenantId: string): Promise<any> {
+    const log = await WebhookLog.findOne({ _id: logId, tenantId });
     if (!log) throw new Error('Webhook log not found');
 
-    const webhook = await Webhook.findById(log.webhookId);
+    const webhook = await Webhook.findOne({ _id: log.webhookId, tenantId }).select('+secret');
     if (!webhook) throw new Error('Webhook not found');
 
     const startTime = Date.now();
+    const timestamp = Date.now().toString();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Webhook-Event': log.event,
+      'X-Webhook-ID': webhook._id.toString(),
+      'X-CMS-Timestamp': timestamp,
+    };
+    if (webhook.secret) {
+      const signature = crypto.createHmac('sha256', webhook.secret).update(`${timestamp}.${JSON.stringify(log.payload)}`).digest('hex');
+      headers['X-CMS-Signature'] = `sha256=${signature}`;
+    }
     try {
-      const response = await fetch(webhook.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Webhook-Event': log.event,
-          'X-Webhook-ID': webhook._id.toString()
-        },
-        body: JSON.stringify(log.payload)
+      const response = await safePost(webhook.url, log.payload, {
+        headers,
+        timeout: 5000,
+        validateStatus: () => true,
+        responseType: 'text',
       });
-
+      const ok = response.status >= 200 && response.status < 300;
       const duration = Date.now() - startTime;
-      const responseBody = await response.text();
-
       await WebhookLog.findByIdAndUpdate(logId, {
         $set: {
-          response: {
-            statusCode: response.status,
-            body: responseBody.substring(0, 1000),
-            duration
-          },
-          status: response.ok ? 'success' : 'failed',
+          response: { statusCode: response.status, body: String(response.data ?? '').substring(0, 1000), duration },
+          status: ok ? 'success' : 'failed',
           attempts: log.attempts + 1,
-          error: response.ok ? undefined : `HTTP ${response.status}`
-        }
+          error: ok ? undefined : `HTTP ${response.status}`,
+        },
       });
-
-      return { success: response.ok, statusCode: response.status };
+      return { success: ok, statusCode: response.status };
     } catch (error: any) {
       const duration = Date.now() - startTime;
       await WebhookLog.findByIdAndUpdate(logId, {
@@ -127,8 +131,8 @@ export class WebhookLogService {
           response: { statusCode: 0, body: error.message, duration },
           status: 'failed',
           attempts: log.attempts + 1,
-          error: error.message
-        }
+          error: error.message,
+        },
       });
       throw error;
     }

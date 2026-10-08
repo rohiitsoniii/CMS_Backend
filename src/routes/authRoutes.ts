@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
 import * as authController from '../controllers/authController.js';
 import { authenticateJWT, requirePermission } from '../middleware/index.js';
-import { authBruteForceLimit, passwordResetBruteForceLimit } from '../middleware/bruteForce.js';
+import { authBruteForceLimit, passwordResetBruteForceLimit, refreshRateLimit } from '../middleware/bruteForce.js';
 
 // Shared validation result checker
 const validate = (req: Request, res: Response, next: NextFunction): void => {
@@ -63,7 +63,7 @@ const apiKeyValidation = [
 // Public routes
 router.post('/register', authBruteForceLimit, registerValidation, validate, authController.register);
 router.post('/login', authBruteForceLimit, loginValidation, validate, authController.login);
-router.post('/refresh', authBruteForceLimit, authController.refresh);
+router.post('/refresh', refreshRateLimit, authController.refresh);
 router.post('/forgot-password', passwordResetBruteForceLimit, forgotPasswordValidation, validate, authController.forgotPassword);
 router.post('/reset-password', authBruteForceLimit, resetPasswordValidation, validate, authController.resetPassword);
 router.post('/logout', authenticateJWT, authController.logout);

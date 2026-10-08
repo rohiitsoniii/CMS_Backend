@@ -58,8 +58,9 @@ const userSchema = new Schema<IUser>({
     maxlength: [50, 'First name cannot exceed 50 characters'],
   },
   lastName: {
+    // Optional: many people have a single name ("Prince", "Rohit")
     type: String,
-    required: [true, 'Last name is required'],
+    default: '',
     trim: true,
     maxlength: [50, 'Last name cannot exceed 50 characters'],
   },

@@ -173,7 +173,7 @@ class WebhookRetryWorker {
       // Each attempt delegates to the existing single-attempt delivery.
       let result: { success: boolean } | null = null;
       try {
-        const r = (await WebhookLogService.retryWebhook(logId)) as { success: boolean };
+        const r = (await WebhookLogService.retryWebhook(logId, String(log.tenantId))) as { success: boolean };
         result = r;
       } catch (err) {
         const msg = (err as Error).message ?? String(err);

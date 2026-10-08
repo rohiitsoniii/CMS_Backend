@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { contentEvents } from '../services/contentEvents.js';
 import mongoose from 'mongoose';
-import { Content, Project, ContentTypes } from '../models/index.js';
+import { Content, Project, ContentTypes, ContentType as ContentTypeModel } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import type { ContentType, ContentStatus } from '../models/Content.js';
 import { AuditService } from '../services/AuditService.js';
@@ -34,8 +34,19 @@ export const createContent = asyncHandler(async (req: Request, res: Response): P
     throw new AppError('Project not found', 404);
   }
   
-  // Validate or default content type
-  const resolvedType = type || (contentTypeId ? ContentTypes.CUSTOM : undefined);
+  // Validate or default content type. A custom type can be named by its
+  // apiId (e.g. "product"), which is what API-only clients naturally send.
+  let resolvedType = type || (contentTypeId ? ContentTypes.CUSTOM : undefined);
+  let resolvedContentTypeId = contentTypeId;
+  if (resolvedType && !Object.values(ContentTypes).includes(resolvedType)) {
+    const custom = typeof resolvedType === 'string'
+      ? await ContentTypeModel.findOne({ tenantId: req.tenantId, apiId: resolvedType }).select('_id').lean()
+      : null;
+    if (custom) {
+      resolvedType = ContentTypes.CUSTOM;
+      resolvedContentTypeId = custom._id;
+    }
+  }
   if (!resolvedType || !Object.values(ContentTypes).includes(resolvedType)) {
     throw new AppError(`Invalid content type: ${type}`, 400);
   }
@@ -73,7 +84,7 @@ export const createContent = asyncHandler(async (req: Request, res: Response): P
           projectId,
           tenantId: req.tenantId,
           type: resolvedType,
-          contentTypeId: contentTypeId || undefined,
+          contentTypeId: resolvedContentTypeId || undefined,
           name: resolvedName,
           slug: resolvedSlug,
           data: data || {},
@@ -137,6 +148,14 @@ export const getContentList = asyncHandler(async (req: Request, res: Response): 
   if (projectId) query.projectId = String(projectId);
   if (type) query.type = String(type);
   if (contentTypeId) query.contentTypeId = String(contentTypeId);
+  // ?type=<custom apiId> lists entries of that custom content type
+  if (type && !(Object.values(ContentTypes) as string[]).includes(String(type))) {
+    const custom = await ContentTypeModel.findOne({ tenantId: req.tenantId, apiId: String(type) }).select('_id').lean();
+    if (custom) {
+      query.type = ContentTypes.CUSTOM;
+      query.contentTypeId = custom._id;
+    }
+  }
   if (status && status !== 'all') query.status = String(status);
   if (!includeArchived && (!status || status === 'all')) query.status = { $ne: 'archived' };
 

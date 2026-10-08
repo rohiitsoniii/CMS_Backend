@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Content, Project, Knowledge, ContentTypes } from '../models/index.js';
+import { Content, Project, Knowledge, ContentTypes, ContentType as ContentTypeModel } from '../models/index.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { analyticsService } from '../services/analyticsService.js';
 import type { ContentType } from '../models/Content.js';
@@ -24,6 +24,7 @@ export const getAllContent = asyncHandler(async (req: Request, res: Response): P
   // Find project by slug
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -83,6 +84,7 @@ export const getDefaultContent = (contentType: ContentType) => {
     
     const project = await Project.findOne({
       slug: projectSlug,
+      tenantId: req.tenantId,
       status: 'active',
     });
     
@@ -137,6 +139,7 @@ export const getBlogs = asyncHandler(async (req: Request, res: Response): Promis
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -215,6 +218,7 @@ export const getBlogBySlug = asyncHandler(async (req: Request, res: Response): P
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -285,6 +289,7 @@ export const getPageBySlug = asyncHandler(async (req: Request, res: Response): P
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -349,6 +354,7 @@ export const getFAQs = asyncHandler(async (req: Request, res: Response): Promise
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -401,6 +407,7 @@ export const getTestimonials = asyncHandler(async (req: Request, res: Response):
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -451,6 +458,7 @@ export const chatWithBot = asyncHandler(async (req: Request, res: Response): Pro
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -512,6 +520,7 @@ export const getChatbotConfig = asyncHandler(async (req: Request, res: Response)
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   }).select('chatbot branding');
   
@@ -545,4 +554,86 @@ export const getChatbotConfig = asyncHandler(async (req: Request, res: Response)
       },
     },
   });
+});
+
+// ============================
+// Custom content types (collections)
+// ============================
+
+const SORTABLE = new Set(['publishedAt', 'createdAt', 'updatedAt', 'name', 'order']);
+
+async function resolveCollection(req: Request) {
+  const { projectSlug, apiId } = req.params;
+  const project = await Project.findOne({ slug: projectSlug, tenantId: req.tenantId, status: 'active' });
+  if (!project) throw new AppError('Project not found', 404);
+  // Built-in types (blog, faq, popup…) are addressable here too
+  if ((Object.values(ContentTypes) as string[]).includes(apiId) && apiId !== ContentTypes.CUSTOM) {
+    return { project, filter: { type: apiId } as Record<string, unknown> };
+  }
+  const contentType = await ContentTypeModel.findOne({ tenantId: req.tenantId, apiId }).select('_id').lean();
+  if (!contentType) throw new AppError('Content type not found', 404);
+  return { project, filter: { type: ContentTypes.CUSTOM, contentTypeId: contentType._id } as Record<string, unknown> };
+}
+
+const localized = (item: any, locale?: string) =>
+  locale && item.localizedData?.[locale] ? { ...item.data, ...item.localizedData[locale] } : item.data;
+
+const shapeEntry = (item: any, locale?: string) => ({
+  id: String(item._id),
+  slug: item.slug,
+  name: item.name,
+  data: localized(item, locale),
+  seo: item.seo,
+  publishedAt: item.meta?.publishedAt,
+  updatedAt: item.updatedAt,
+});
+
+/**
+ * List published entries of any content type, including custom ones
+ * GET /api/v1/deliver/:projectSlug/collections/:apiId?page=&limit=&sort=-publishedAt&locale=&data.<field>=<value>
+ */
+export const getCollection = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { project, filter } = await resolveCollection(req);
+  const locale = (req.query.lang || req.query.locale) as string | undefined;
+  const query: Record<string, unknown> = {
+    ...filter, projectId: project._id, status: 'published', visibility: 'public', isDeleted: false,
+  };
+  // Simple equality filters on data fields: ?data.category=shoes
+  for (const [k, v] of Object.entries(req.query)) {
+    if (/^data\.[A-Za-z0-9_]{1,64}$/.test(k) && typeof v === 'string') query[k] = v.slice(0, 200);
+  }
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit)) || 20));
+  const rawSort = String(req.query.sort || '-publishedAt');
+  const field = rawSort.replace(/^-/, '');
+  const sortField = SORTABLE.has(field) ? (field === 'publishedAt' ? 'meta.publishedAt' : field === 'order' ? 'data.order' : field) : 'meta.publishedAt';
+  const sort: Record<string, 1 | -1> = { [sortField]: rawSort.startsWith('-') ? -1 : 1, _id: -1 };
+
+  const [items, total] = await Promise.all([
+    Content.find(query).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
+    Content.countDocuments(query),
+  ]);
+  res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
+  res.json({
+    success: true,
+    data: {
+      items: items.map((i) => shapeEntry(i, locale)),
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    },
+  });
+});
+
+/**
+ * Single published entry of any content type by slug
+ * GET /api/v1/deliver/:projectSlug/collections/:apiId/:slug
+ */
+export const getCollectionItem = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { project, filter } = await resolveCollection(req);
+  const locale = (req.query.lang || req.query.locale) as string | undefined;
+  const item = await Content.findOne({
+    ...filter, projectId: project._id, slug: req.params.slug, status: 'published', visibility: 'public', isDeleted: false,
+  }).lean();
+  if (!item) throw new AppError('Entry not found', 404);
+  res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
+  res.json({ success: true, data: shapeEntry(item, locale) });
 });

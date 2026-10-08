@@ -103,6 +103,7 @@ export const chatWithBot = asyncHandler(async (req: Request, res: Response): Pro
   
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   
@@ -181,6 +182,7 @@ export const getChatSuggestions = asyncHandler(async (req: Request, res: Respons
   const { projectSlug } = req.params;
   const project = await Project.findOne({
     slug: projectSlug,
+    tenantId: req.tenantId,
     status: 'active',
   });
   

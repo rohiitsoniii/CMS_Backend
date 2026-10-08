@@ -21,6 +21,8 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 beforeAll(async () => {
   delete process.env.WEBHOOK_RETRY_ENABLED;
+  // The stub endpoint is on 127.0.0.1, which deliveries block by default (SSRF)
+  process.env.ALLOW_PRIVATE_NETWORK_FETCH = 'true';
   server = createServer(async (_req: IncomingMessage, res: ServerResponse) => {
     // Drain body so fetch resolves cleanly.
     await readBody(_req);
@@ -38,6 +40,7 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  delete process.env.ALLOW_PRIVATE_NETWORK_FETCH;
   webhookRetryWorker.stop();
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });

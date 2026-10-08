@@ -13,6 +13,8 @@ import jwt from 'jsonwebtoken';
 import { config } from './config/index.js';
 import { validateEnv } from './config/validateEnv.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
+import { ensureDefaultPlans } from './config/defaultPlans.js';
+import { resolveApiKeyPrincipal } from './middleware/apiKeyAuth.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import routes from './routes/index.js';
 import swaggerRouter from './config/swagger.js';
@@ -41,6 +43,9 @@ const startServer = async () => {
 
     // Connect to MongoDB
     await connectDatabase();
+
+    // First boot: make sure the plan catalogue exists (pricing page + quotas)
+    await ensureDefaultPlans().catch((err) => console.warn('[plans] seeding skipped:', err?.message));
 
     // Run pending DB migrations before serving traffic. Fail-closed in
     // production (a half-migrated schema must never serve); warn-and-
@@ -72,9 +77,8 @@ const startServer = async () => {
     // Request ID Generation
     app.use(requestIdMiddleware);
 
-    // Cookies (httpOnly session cookies) + double-submit CSRF protection
+    // Cookies (httpOnly session cookies); CSRF is checked after CORS below
     app.use(cookieParser());
-    app.use(csrfProtection);
 
     // Error monitoring (no-op unless SENTRY_DSN is set) + HTTP metrics
     app.use(sentryMiddleware);
@@ -100,9 +104,6 @@ const startServer = async () => {
         preload: true
       }
     }));
-
-    // Legacy no-op CSRF placeholder — real protection is double-submit
-    // tokens via csrfProtection (src/middleware/cookies.ts), mounted below.
 
     // CORS — single shared policy (REST and GraphQL alike). Production
     // allows the configured frontend plus ALLOWED_ORIGINS entries.
@@ -131,6 +132,10 @@ const startServer = async () => {
       const isPublic = PUBLIC_CORS_PREFIXES.some((p) => req.path.startsWith(p));
       return (isPublic ? publicCors : dashboardCors)(req, res, next);
     });
+
+    // Double-submit CSRF protection. Mounted after CORS so a rejection still
+    // carries CORS headers (otherwise browsers report an opaque network error).
+    app.use(csrfProtection);
 
     // Body Parser — Stripe webhook needs the RAW body for signature
     // verification, so it is exempted here and parsed via express.raw()
@@ -199,7 +204,17 @@ const startServer = async () => {
         context: async ({ req }) => {
           const token = req.headers.authorization || '';
           if (!token.startsWith('Bearer ')) {
-            return {};
+            // API-only mode: X-API-Key + X-API-Secret; read-only keys cannot run mutations
+            if (!req.headers['x-api-key']) return {};
+            const principal = await resolveApiKeyPrincipal(String(req.headers['x-api-key']), req.headers['x-api-secret'] as string | undefined);
+            if (!principal.ok) return {};
+            const isMutation = /^\s*mutation\b/.test(String(req.body?.query || ''));
+            if (isMutation && !principal.canWrite) return {};
+            return {
+              user: { id: String(principal.key.createdBy), _id: principal.key.createdBy, role: 'api_key' },
+              tenantId: principal.tenant._id.toString(),
+              mfaVerified: true,
+            };
           }
           try {
             const decoded = jwt.verify(token.split(' ')[1], config.jwt.secret) as any;

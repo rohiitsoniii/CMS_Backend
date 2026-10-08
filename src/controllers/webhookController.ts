@@ -3,6 +3,25 @@ import Webhook from '../models/Webhook';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { webhookService } from '../services/webhookService';
 import { WebhookLogService } from '../services/webhookLogService.js';
+import { Project } from '../models/index.js';
+import { assertPublicUrl } from '../utils/safeFetch.js';
+
+const tenantOf = (req: Request) => req.user!.tenantId.toString();
+
+/** Throws unless the URL is a public http(s) endpoint (no localhost/private IPs). */
+function assertWebhookUrl(url: unknown) {
+  if (url === undefined) return;
+  try {
+    assertPublicUrl(String(url));
+  } catch (err: any) {
+    throw new AppError(`Webhook URL not allowed: ${err.message}`, 400, 'WEBHOOK_URL_BLOCKED');
+  }
+}
+
+async function assertOwnProject(req: Request, projectId: unknown) {
+  const project = await Project.exists({ _id: projectId, tenantId: tenantOf(req) });
+  if (!project) throw new AppError('Project not found', 404);
+}
 
 export const getWebhooks = asyncHandler(async (req: Request, res: Response) => {
   const { projectId } = req.query;
@@ -11,7 +30,7 @@ export const getWebhooks = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Project ID is required', 400);
   }
 
-  const webhooks = await Webhook.find({ projectId }).sort({ createdAt: -1 });
+  const webhooks = await Webhook.find({ projectId, tenantId: tenantOf(req) }).sort({ createdAt: -1 });
   
   res.json({
     success: true,
@@ -20,7 +39,7 @@ export const getWebhooks = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getWebhook = asyncHandler(async (req: Request, res: Response) => {
-  const webhook = await Webhook.findById(req.params.id);
+  const webhook = await Webhook.findOne({ _id: req.params.id, tenantId: tenantOf(req) });
   
   if (!webhook) {
     throw new AppError('Webhook not found', 404);
@@ -34,9 +53,11 @@ export const getWebhook = asyncHandler(async (req: Request, res: Response) => {
 
 export const createWebhook = asyncHandler(async (req: Request, res: Response) => {
   const { projectId, name, url, events, headers, secret } = req.body;
+  assertWebhookUrl(url);
+  await assertOwnProject(req, projectId);
   
   const webhook = await Webhook.create({
-    tenantId: req.user!.tenantId.toString(),
+    tenantId: tenantOf(req),
     projectId,
     name,
     url,
@@ -51,10 +72,15 @@ export const createWebhook = asyncHandler(async (req: Request, res: Response) =>
   });
 });
 
+const UPDATABLE = ['name', 'url', 'events', 'headers', 'secret', 'isEnabled', 'integrationType'] as const;
+
 export const updateWebhook = asyncHandler(async (req: Request, res: Response) => {
-  const webhook = await Webhook.findByIdAndUpdate(
-    req.params.id,
-    req.body,
+  assertWebhookUrl(req.body.url);
+  const update: Record<string, unknown> = {};
+  for (const k of UPDATABLE) if (req.body[k] !== undefined) update[k] = req.body[k];
+  const webhook = await Webhook.findOneAndUpdate(
+    { _id: req.params.id, tenantId: tenantOf(req) },
+    { $set: update },
     { new: true, runValidators: true }
   );
   
@@ -69,7 +95,8 @@ export const updateWebhook = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const deleteWebhook = asyncHandler(async (req: Request, res: Response) => {
-  await Webhook.findByIdAndDelete(req.params.id);
+  const deleted = await Webhook.findOneAndDelete({ _id: req.params.id, tenantId: tenantOf(req) });
+  if (!deleted) throw new AppError('Webhook not found', 404);
   
   res.json({
     success: true,
@@ -78,8 +105,7 @@ export const deleteWebhook = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const testWebhook = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const webhook = await Webhook.findById(id);
+  const webhook = await Webhook.findOne({ _id: req.params.id, tenantId: tenantOf(req) });
   
   if (!webhook) {
     throw new AppError('Webhook not found', 404);
@@ -143,14 +169,15 @@ export const retryWebhookLog = asyncHandler(async (req: Request, res: Response) 
   const { id } = req.params;
 
   try {
-    const result = await WebhookLogService.retryWebhook(id);
+    const result = await WebhookLogService.retryWebhook(id, tenantOf(req));
     res.json({
       success: result.success,
       message: result.success ? 'Retry successful' : 'Retry failed',
       statusCode: result.statusCode
     });
   } catch (error: any) {
-    res.status(500).json({
+    const notFound = /not found/i.test(error.message);
+    res.status(notFound ? 404 : 502).json({
       success: false,
       error: error.message
     });

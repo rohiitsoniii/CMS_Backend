@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/index.js';
 import { Tenant, User, type ITenant, type IUser } from '../models/index.js';
+import { authenticateManagementApiKey } from './apiKeyAuth.js';
 
 // Extend Express Request type
 declare global {
@@ -42,6 +43,11 @@ export const authenticateJWT = async (
     const token = authHeader?.startsWith('Bearer ')
       ? authHeader.split(' ')[1]
       : (req.cookies?.accessToken as string | undefined);
+
+    // API-only mode: server-side code can use an API key + secret instead of a session
+    if (!authHeader?.startsWith('Bearer ') && req.headers['x-api-key']) {
+      return authenticateManagementApiKey(req, res, next);
+    }
 
     if (!token) {
       res.status(401).json({

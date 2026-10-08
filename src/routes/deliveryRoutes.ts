@@ -9,6 +9,8 @@ import {
   getFAQs,
   getTestimonials,
   getChatbotConfig,
+  getCollection,
+  getCollectionItem,
 } from '../controllers/deliveryController.js';
 import {
   chatWithBot,
@@ -132,6 +134,17 @@ router.get('/:projectSlug/gallery', cacheResponse(300), getDefaultContent(Conten
 // CTA
 router.get('/:projectSlug/cta', cacheResponse(300), getDefaultContent(ContentTypes.CTA));
 
+// Any content type, including custom types built in the schema builder
+router.param('apiId', (_req, res, next, value) => {
+  if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) {
+    res.status(400).json({ success: false, error: 'Validation failed', details: [{ field: 'apiId', message: 'Invalid content type' }] });
+    return;
+  }
+  next();
+});
+router.get('/:projectSlug/collections/:apiId', cacheResponse(300), getCollection);
+router.get('/:projectSlug/collections/:apiId/:slug', cacheResponse(300), getCollectionItem);
+
 // ============================
 // Chatbot (FREE - No paid APIs!)
 // ============================
@@ -170,7 +183,7 @@ router.post(
 router.get('/:projectSlug/sitemap.xml', async (req, res) => {
   try {
     const { projectSlug } = req.params;
-    const project = await Project.findOne({ slug: projectSlug, status: 'active' });
+    const project = await Project.findOne({ slug: projectSlug, tenantId: req.tenantId, status: 'active' });
     if (!project) return res.status(404).send('Project not found');
 
     const xml = await buildSitemapXml(project._id.toString());

@@ -44,7 +44,7 @@ export const seoController = {
       });
     } catch (error: any) {
       console.error('SEO Analysis Error:', error);
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -75,7 +75,7 @@ export const seoController = {
 
       return res.status(200).json({ success: true, data: report });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -103,7 +103,7 @@ export const seoController = {
         }
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -117,7 +117,7 @@ export const seoController = {
       res.header('Content-Type', 'application/xml');
       return res.status(200).send(xml);
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -142,7 +142,7 @@ export const seoController = {
 
       return res.status(200).json({ success: true, data: config });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -166,7 +166,7 @@ export const seoController = {
 
       return res.status(200).json({ success: true, data: config });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -179,7 +179,7 @@ export const seoController = {
       const report = await seoAuditService.runAudit(projectId, (req as any).user?.tenantId);
       return res.status(201).json({ success: true, data: report });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -195,7 +195,7 @@ export const seoController = {
         .select('-issues'); // Summary only
       return res.status(200).json({ success: true, data: history });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -209,7 +209,7 @@ export const seoController = {
       if (!report) return res.status(404).json({ success: false, message: 'Report not found' });
       return res.status(200).json({ success: true, data: report });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -240,7 +240,7 @@ export const seoController = {
         }
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -265,7 +265,7 @@ export const seoController = {
 
       return res.status(201).json({ success: true, data: kw });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -278,7 +278,7 @@ export const seoController = {
       const keywords = await KeywordRank.find({ projectId }).sort({ currentRank: 1 });
       return res.status(200).json({ success: true, data: keywords });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -291,7 +291,7 @@ export const seoController = {
       await KeywordRank.deleteOne({ _id: keywordId, projectId });
       return res.status(200).json({ success: true });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -312,7 +312,7 @@ export const seoController = {
 
       return res.status(200).json({ success: true, data: suggestions });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   },
 
@@ -329,7 +329,7 @@ export const seoController = {
 
       return res.status(200).json({ success: true, data: strategy });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   }
 };
