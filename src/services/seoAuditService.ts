@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { safeGet } from '../utils/safeFetch.js';
 import * as cheerio from 'cheerio';
 import { SeoAuditReport, IAuditIssue } from '../models/SeoAuditReport';
 import { Project } from '../models/Project';
@@ -72,7 +72,7 @@ export class SeoAuditService {
 
   private async analyzePage(url: string, baseUrl: string) {
     try {
-      const response = await axios.get(url, { 
+      const response = await safeGet(url, { 
         timeout: 10000,
         headers: { 'User-Agent': 'HeadlessCMS-AuditBot/1.0' }
       });

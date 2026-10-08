@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { checkAPIRateLimit } from '../middleware/quotaMiddleware.js';
 import {
   getAllContent,
   getDefaultContent,
@@ -29,6 +30,8 @@ router.use(authenticateAPIKey);
 
 // Global API-key rate limiting
 router.use(apiKeyRateLimiter);
+// Monthly API-call quota for the public delivery API (tenant comes from the API key)
+router.use(checkAPIRateLimit);
 
 // Per-project isolation rate limiting (protects tenants from each other)
 router.use(deliveryRateLimit);

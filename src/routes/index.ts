@@ -49,6 +49,12 @@ import seoRoutes from './seoRoutes.js';
 import emailRoutes from './emailRoutes.js';
 import emailPublicRoutes from './emailPublicRoutes.js';
 import seoPublicRoutes from './seoPublicRoutes.js';
+import growthRoutes from './growthRoutes.js';
+import { gscCallback as gscCallbackHandler } from '../controllers/seoSuiteController.js';
+import formPublicRoutes from './formPublicRoutes.js';
+import popupPublicRoutes from './popupPublicRoutes.js';
+import { usage as usageSummaryHandler } from '../controllers/growthController.js';
+import { publicRouter as siteAnalyticsPublic, privateRouter as siteAnalyticsPrivate } from './siteAnalyticsRoutes.js';
 import aiRoutes from './aiRoutes.js';
 import searchRoutes from './searchRoutes.js';
 import { getJob } from '../controllers/jobStatusController.js';
@@ -127,6 +133,15 @@ router.use('/projects/:projectId/email', emailRoutes);
 
 // Content search (Elasticsearch with MongoDB fallback)
 router.use('/projects/:projectId/search', searchRoutes);
+
+// Automations, forms, contact profiles (auth per route)
+router.use('/projects/:projectId', growthRoutes);
+
+// Plan usage across all metered features
+router.get('/usage', authenticateJWT, usageSummaryHandler);
+
+// Website analytics reports
+router.use('/projects/:projectId/site-analytics', siteAnalyticsPrivate);
 
 // AI assistant (BYOK-aware, metered)
 router.use('/ai', aiRoutes);
@@ -254,6 +269,18 @@ router.use('/public/email', emailPublicRoutes);
 
 // Public SEO: sitemap, robots (AI crawlers), llms.txt, redirects, meta bundles
 router.use('/public/seo', seoPublicRoutes);
+
+// Google Search Console OAuth callback (state carries the project)
+router.get('/seo/gsc/callback', gscCallbackHandler);
+
+// Website analytics (tracker.js collect endpoint)
+router.use('/public/analytics', siteAnalyticsPublic);
+
+// Embeddable forms (form.js)
+router.use('/public/forms', formPublicRoutes);
+
+// Targeted popups / announcement bars (popup.js)
+router.use('/public/popups', popupPublicRoutes);
 
 // ============================
 // Public RAG Bot Widget API

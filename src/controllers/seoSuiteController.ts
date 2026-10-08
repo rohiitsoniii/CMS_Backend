@@ -10,6 +10,8 @@ import { asyncHandler, AppError } from '../middleware/index.js';
 import { analyzeGeo, buildMetaBundle, loadSeoContext } from '../services/geoService.js';
 import { contentPath, normalizeSiteUrl, seoPingService } from '../services/seoPingService.js';
 import { checkKeywordRank, rankProviderConfigured } from '../services/seoRankService.js';
+import * as gsc from '../services/searchConsoleService.js';
+import { aiGateway } from '../services/aiGateway.js';
 
 /**
  * SEO suite (authenticated): settings, IndexNow, redirects, 404s, GEO score,
@@ -65,6 +67,7 @@ export const getSettings = asyncHandler(async (req: Request, res: Response) => {
       integrations: {
         rankTracking: rankProviderConfigured(),
         pageSpeedKey: Boolean(process.env.PAGESPEED_API_KEY),
+        searchConsole: gsc.gscConfigured(),
       },
     },
   });
@@ -338,4 +341,103 @@ export const checkRanks = asyncHandler(async (req: Request, res: Response) => {
     }
   }
   res.json({ success: true, data: results });
+});
+
+// ---------------------------------------------------------------------------
+// Google Search Console
+// ---------------------------------------------------------------------------
+
+export const gscStatus = asyncHandler(async (req: Request, res: Response) => {
+  const s = await SeoSettings.findOne({ projectId: pid(req) }).select('gsc').lean();
+  res.json({ success: true, data: { configured: gsc.gscConfigured(), redirectUri: gsc.gscRedirectUri(), ...(s as any)?.gsc } });
+});
+
+export const gscConnectUrl = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ success: true, data: { url: gsc.connectUrl(req.params.projectId, String(req.user?._id)) } });
+});
+
+/** Public: Google redirects here (state carries the project). */
+export const gscCallback = asyncHandler(async (req: Request, res: Response) => {
+  const app = (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+  let projectId = '';
+  try {
+    const state = gsc.readState(String(req.query.state || ''));
+    projectId = state.p;
+    if (req.query.error) throw new AppError(String(req.query.error), 400);
+    await gsc.completeConnection(projectId, String(req.query.code || ''));
+    res.redirect(302, `${app}/dashboard/project/${projectId}/seo/search-console?connected=1`);
+  } catch (err: any) {
+    const target = projectId ? `${app}/dashboard/project/${projectId}/seo/search-console` : `${app}/dashboard`;
+    res.redirect(302, `${target}?error=${encodeURIComponent(String(err.message || 'Connection failed').slice(0, 200))}`);
+  }
+});
+
+export const gscSites = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ success: true, data: await gsc.listSites(req.params.projectId) });
+});
+
+export const gscSelectSite = asyncHandler(async (req: Request, res: Response) => {
+  const siteUrl = String(req.body?.siteUrl || '');
+  const sites = await gsc.listSites(req.params.projectId);
+  if (!sites.find((s: any) => s.siteUrl === siteUrl)) throw new AppError('That property is not available on the connected Google account', 400);
+  await SeoSettings.updateOne({ projectId: pid(req) }, { $set: { 'gsc.siteUrl': siteUrl } });
+  res.json({ success: true });
+});
+
+export const gscPerformance = asyncHandler(async (req: Request, res: Response) => {
+  const days = Math.min(90, Math.max(7, parseInt(String(req.query.days || '28'), 10) || 28));
+  res.json({ success: true, data: await gsc.performance(req.params.projectId, days) });
+});
+
+export const gscDisconnect = asyncHandler(async (req: Request, res: Response) => {
+  await gsc.disconnect(pid(req));
+  res.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
+// Content brief (AI) + live GEO scoring of a draft
+// ---------------------------------------------------------------------------
+
+export const contentBrief = asyncHandler(async (req: Request, res: Response) => {
+  const keyword = String(req.body?.keyword || '').trim().slice(0, 200);
+  if (!keyword) throw new AppError('Enter a keyword or topic', 400);
+  const audience = String(req.body?.audience || '').slice(0, 300);
+  const { settings } = await loadSeoContext(req.params.projectId);
+  const prompt = `You are an SEO and GEO (AI search) content strategist. Create a content brief for the topic "${keyword}"${audience ? ` for this audience: ${audience}` : ''}${settings?.siteName ? ` on the website "${settings.siteName}"` : ''}.
+
+Return ONLY JSON with this shape:
+{
+  "searchIntent": "informational | commercial | transactional | navigational",
+  "titles": ["3 title options under 60 characters"],
+  "metaDescription": "under 155 characters",
+  "summary": "a 2-3 sentence direct answer to open the article with",
+  "outline": [{ "heading": "H2 phrased as a question where natural", "points": ["what to cover"] }],
+  "questions": ["6-10 questions people ask that the article must answer"],
+  "entities": ["key terms, products, people or concepts to mention"],
+  "statistics": ["kinds of numbers/data worth citing"],
+  "wordCount": 1200,
+  "faq": [{ "question": "...", "answer": "1-2 sentence answer" }]
+}`;
+  const raw = await aiGateway.chat(prompt, { maxTokens: 2500, temperature: 0.4 });
+  const json = raw.match(/\{[\s\S]*\}/);
+  if (!json) throw new AppError('The AI did not return a brief. Try again.', 502);
+  try {
+    res.json({ success: true, data: { keyword, ...JSON.parse(json[0]) } });
+  } catch {
+    throw new AppError('The AI returned an invalid brief. Try again.', 502);
+  }
+});
+
+export const analyzeDraft = asyncHandler(async (req: Request, res: Response) => {
+  const html = String(req.body?.html || '');
+  if (!html.trim()) throw new AppError('Paste some content to analyse', 400);
+  const { site } = await loadSeoContext(req.params.projectId);
+  const geo = analyzeGeo({
+    type: req.body?.type || 'blog',
+    name: String(req.body?.title || 'Draft'),
+    updatedAt: new Date(),
+    seo: { metaTitle: req.body?.title, metaDescription: req.body?.metaDescription },
+    data: { title: req.body?.title, content: html.slice(0, 200_000), author: req.body?.author },
+  }, site ? new URL(site).host : null);
+  res.json({ success: true, data: geo });
 });

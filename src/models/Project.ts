@@ -152,6 +152,12 @@ const ProjectSchema = new Schema<IProject>(
         defaultDescription: String,
       },
       previewUrl: String,
+      // Where the project's own website handles end-user account links.
+      // {token} is replaced; without it ?token= is appended.
+      endUserUrls: {
+        verifyEmail: String,
+        resetPassword: String,
+      },
     },
     
     branding: {

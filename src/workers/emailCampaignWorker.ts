@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { EmailCampaign } from '../models/EmailCampaign.js';
 import { prepareCampaign, sendCampaignBatch } from '../services/emailMarketingService.js';
+import { withJobLock } from '../utils/jobLock.js';
+import { processDueEnrollments } from '../services/automationService.js';
 
 /**
  * Starts due scheduled campaigns and drips pending recipients of sending
@@ -25,29 +27,36 @@ class EmailCampaignWorker {
         if (this.busy) return;
         this.busy = true;
         try {
-            const due = await EmailCampaign.find({ status: 'scheduled', scheduledFor: { $lte: new Date() } }).limit(20);
-            for (const campaign of due) {
-                try {
-                    const total = await prepareCampaign(campaign);
-                    if (total === 0) {
-                        campaign.status = 'failed';
-                        campaign.lastError = 'No subscribed contacts in this audience at send time';
-                        await campaign.save();
-                    }
-                } catch (err: any) {
-                    campaign.status = 'failed';
-                    campaign.lastError = String(err.message || err).slice(0, 500);
-                    await campaign.save();
-                }
-            }
-
-            const sending = await EmailCampaign.find({ status: 'sending' }).select('_id').limit(50);
-            for (const c of sending) {
-                await sendCampaignBatch(c._id);
-            }
+            await withJobLock('email-campaigns', 5 * 60_000, () => this.run());
         } finally {
             this.busy = false;
         }
+    }
+
+    private async run() {
+        const due = await EmailCampaign.find({ status: 'scheduled', scheduledFor: { $lte: new Date() } }).limit(20);
+        for (const campaign of due) {
+            try {
+                const total = await prepareCampaign(campaign);
+                if (total === 0) {
+                    campaign.status = 'failed';
+                    campaign.lastError = 'No subscribed contacts in this audience at send time';
+                    await campaign.save();
+                }
+            } catch (err: any) {
+                campaign.status = 'failed';
+                campaign.lastError = String(err.message || err).slice(0, 500);
+                await campaign.save();
+            }
+        }
+
+        const sending = await EmailCampaign.find({ status: 'sending' }).select('_id').limit(50);
+        for (const c of sending) {
+            await sendCampaignBatch(c._id);
+        }
+
+        // Automation emails that are due
+        await processDueEnrollments(Math.max(1, parseInt(process.env.EMAIL_SEND_BATCH || '50', 10)));
     }
 }
 

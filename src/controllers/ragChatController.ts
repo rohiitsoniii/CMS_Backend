@@ -5,6 +5,14 @@ import { subscribe, sendConfirmationEmail } from '../services/emailMarketingServ
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { isOriginAllowed } from '../middleware/apiKeyAuth.js';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
+
+/** Constant-time comparison of bot keys (no timing side channel). */
+const keysMatch = (expected: string, given: string) => {
+  const a = Buffer.from(String(expected || ''));
+  const b = Buffer.from(String(given || ''));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
 import { ragQueryService } from '../services/ragQueryService.js';
 
 /**
@@ -34,7 +42,7 @@ export const getWidgetConfig = asyncHandler(async (req: Request, res: Response, 
   }
 
   // Validate API Key
-  if (bot.apiKey !== apiKey) {
+  if (!keysMatch(bot.apiKey, apiKey)) {
     throw new AppError('Invalid API Key', 401);
   }
 
@@ -71,7 +79,7 @@ export const ragChat = asyncHandler(async (req: Request, res: Response, _next: N
   }
   
   // Validate API Key
-  if (bot.apiKey !== apiKey) {
+  if (!keysMatch(bot.apiKey, apiKey)) {
     throw new AppError('Invalid API Key', 401);
   }
   
@@ -94,6 +102,7 @@ export const ragChat = asyncHandler(async (req: Request, res: Response, _next: N
     data: {
       message: result.message,
       sources: result.sources,
+      handoff: result.handoff,
       sessionId
     }
   });
@@ -161,7 +170,7 @@ export const captureLead = asyncHandler(async (req: Request, res: Response, _nex
     ]
   });
   if (!bot) throw new AppError('Bot not found or inactive', 404);
-  if (bot.apiKey !== apiKey) throw new AppError('Invalid API Key', 401);
+  if (!keysMatch(bot.apiKey, apiKey)) throw new AppError('Invalid API Key', 401);
 
   const origin = req.get('origin');
   if (origin && bot.allowedOrigins?.length > 0 && !isOriginAllowed(origin, bot.allowedOrigins)) {
@@ -201,4 +210,87 @@ export const captureLead = asyncHandler(async (req: Request, res: Response, _nex
   }
 
   res.json({ success: true, data: { needsConfirmation: result.needsConfirmation } });
+});
+
+async function loadPublicBot(req: Request) {
+  const { botSlug } = req.params;
+  const apiKey = (req.headers['x-bot-key'] as string) || req.body?.apiKey || req.query.apiKey;
+  if (!apiKey || typeof apiKey !== 'string') throw new AppError('apiKey is required', 400);
+  const bot = await RagBot.findOne({
+    $or: [
+      { slug: botSlug, status: 'active' },
+      { _id: mongoose.isValidObjectId(botSlug) ? botSlug : null, status: 'active' },
+    ],
+  });
+  if (!bot) throw new AppError('Bot not found or inactive', 404);
+  if (!keysMatch(bot.apiKey, apiKey)) throw new AppError('Invalid API Key', 401);
+  const origin = req.get('origin');
+  if (origin && bot.allowedOrigins?.length > 0 && !isOriginAllowed(origin, bot.allowedOrigins)) {
+    throw new AppError('Origin not allowed', 403);
+  }
+  return bot;
+}
+
+/**
+ * Visitor asks for a human. POST /api/v1/bots/:botSlug/handoff
+ */
+export const requestHandoff = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const bot = await loadPublicBot(req);
+  const { sessionId, email, message } = req.body || {};
+  if (!sessionId || typeof sessionId !== 'string') throw new AppError('sessionId is required', 400);
+
+  const conv = await RagConversation.findOneAndUpdate(
+    { sessionId, botId: bot._id },
+    {
+      $setOnInsert: { botId: bot._id, projectId: bot.projectId, tenantId: bot.tenantId, sessionId },
+      $set: {
+        'handoff.status': 'requested',
+        'handoff.requestedAt': new Date(),
+        lastMessageAt: new Date(),
+        ...(typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { visitorEmail: email.toLowerCase() } : {}),
+      },
+      $push: { messages: { role: 'system', content: 'Visitor asked to talk to a person.', timestamp: new Date() } },
+      $inc: { unreadForAgent: 1 },
+    },
+    { upsert: true, new: true }
+  );
+  if (typeof message === 'string' && message.trim()) {
+    await RagConversation.updateOne({ _id: conv._id }, { $push: { messages: { role: 'user', content: message.slice(0, 4000), timestamp: new Date() } } });
+  }
+
+  // Tell the team (in-app + email) — never blocks the visitor
+  void (async () => {
+    const { User } = await import('../models/User.js');
+    const { mailerService } = await import('../services/mailerService.js');
+    const team = await User.find({ tenantId: bot.tenantId, role: { $in: ['owner', 'admin', 'editor'] }, isActive: { $ne: false } }).select('email').lean();
+    const link = `${(process.env.FRONTEND_URL || '').replace(/\/+$/, '')}/dashboard/project/${bot.projectId}/inbox?c=${conv._id}`;
+    if (team.length) {
+      await mailerService.send({
+        category: 'system',
+        to: team.map((u: any) => u.email),
+        subject: `A visitor wants to talk to a person (${bot.name})`,
+        html: `<p>A visitor on your website asked for a human in <strong>${bot.name}</strong>.</p><p><a href="${link}">Open the conversation</a></p>`,
+      });
+    }
+  })().catch(() => undefined);
+
+  res.json({ success: true, data: { status: 'requested' } });
+});
+
+/**
+ * Widget polling for agent replies. GET /api/v1/bots/:botSlug/messages?sessionId=&after=
+ */
+export const pollMessages = asyncHandler(async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  const bot = await loadPublicBot(req);
+  const sessionId = String(req.query.sessionId || '');
+  const after = req.query.after ? new Date(String(req.query.after)) : new Date(0);
+  const conv = await RagConversation.findOne({ sessionId, botId: bot._id }).select('messages handoff').lean();
+  if (!conv) {
+    res.json({ success: true, data: { status: 'bot', messages: [] } });
+    return;
+  }
+  const messages = (conv.messages || [])
+    .filter((m: any) => (m.role === 'agent' || m.role === 'system') && new Date(m.timestamp) > after)
+    .map((m: any) => ({ role: m.role, content: m.content, agentName: m.agentName, timestamp: m.timestamp }));
+  res.json({ success: true, data: { status: conv.handoff?.status || 'bot', agentName: conv.handoff?.assignedName, messages } });
 });

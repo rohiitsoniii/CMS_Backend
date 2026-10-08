@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as pub from '../controllers/emailPublicController.js';
 
@@ -23,5 +23,7 @@ router.get('/u/:token', trackingLimiter, pub.unsubscribePage);
 router.post('/u/:token', trackingLimiter, pub.unsubscribe);
 router.get('/o/:token', trackingLimiter, pub.openPixel);
 router.get('/c/:token', trackingLimiter, pub.clickRedirect);
+// Bounce/complaint webhooks from SendGrid, Mailgun, Resend, SES (SNS), Postmark, Brevo
+router.post('/events/:projectId/:token', express.text({ type: 'text/plain', limit: '1mb' }), pub.providerEvents);
 
 export default router;

@@ -1,4 +1,5 @@
 import Bull, { Job, Queue } from 'bull';
+import { runWithAIContext } from '../services/aiGateway.js';
 import { Content } from '../models/Content';
 import LocaleConfig from '../models/LocaleConfig';
 import translationService from '../services/translationService';
@@ -81,12 +82,14 @@ translationQueue.process(async (job: Job<TranslationJobData>) => {
     if (!config) throw new Error('Locale config not found for tenant');
     if (!config.autoTranslate) throw new Error('Auto-translation is disabled for this tenant');
 
-    // 3. Decrypt API key
-    let decryptedApiKey: string;
-    try {
-        decryptedApiKey = decrypt(config.translationApiKey!);
-    } catch {
-        throw new Error('Failed to decrypt translation API key. Please re-save the key in settings.');
+    // 3. Decrypt the Google key if one is set; otherwise translation uses AI
+    let decryptedApiKey: string | undefined;
+    if (config.translationApiKey) {
+        try {
+            decryptedApiKey = decrypt(config.translationApiKey);
+        } catch {
+            throw new Error('Failed to decrypt translation API key. Please re-save the key in settings.');
+        }
     }
 
     // 4. Build a temporary decrypted config object for the service
@@ -113,11 +116,15 @@ translationQueue.process(async (job: Job<TranslationJobData>) => {
     for (let i = 0; i < targetLocales.length; i++) {
         const locale = targetLocales[i];
         try {
-            const translatedData = await translationService.translateObject(
-                content.data as Record<string, any>,
-                locale.code,
-                workingConfig as any,
-                config.defaultLocale
+            // Attribute AI usage (if any) to this tenant
+            const translatedData = await runWithAIContext(
+                { tenantId: String(tenantId), projectId: content.projectId ? String(content.projectId) : undefined, feature: 'translation' },
+                () => translationService.translateObject(
+                    content.data as Record<string, any>,
+                    locale.code,
+                    workingConfig as any,
+                    config.defaultLocale
+                )
             );
             content.localizedData[locale.code] = translatedData;
             results.push({ locale: locale.code, status: 'done' });

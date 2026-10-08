@@ -19,6 +19,8 @@ router.get('/settings', read, email.getSettings);
 router.put('/settings', settings, email.updateSettings);
 router.post('/settings/test', settings, email.testSettings);
 router.delete('/settings/smtp', settings, email.removeOwnSmtp);
+router.get('/settings/dns', read, email.checkDns);
+router.get('/settings/events-webhook', settings, email.eventsWebhook);
 
 // Audience
 router.get('/subscribers', read, email.listSubscribers);

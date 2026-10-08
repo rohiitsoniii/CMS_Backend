@@ -1,7 +1,7 @@
 import fs from 'fs';
+import { safeGet } from '../utils/safeFetch.js';
 import path from 'path';
 import crypto from 'crypto';
-import axios from 'axios';
 import * as cheerio from 'cheerio';
 // @ts-ignore
 import pdf from 'pdf-parse';
@@ -123,7 +123,7 @@ export class RagIngestionService {
     visited.add(url);
 
     try {
-      const response = await axios.get(url, {
+      const response = await safeGet(url, {
         headers: { 'User-Agent': 'HeadlessCMS-RagBot/1.0' },
         timeout: 10000,
       });

@@ -19,7 +19,30 @@ export class RagQueryService {
     const picked = new Map<string, any>();
 
     const queryVector = await embeddingService.generateEmbedding(query);
-    if (queryVector.length > 0) {
+    const atlasIndex = process.env.ATLAS_VECTOR_INDEX;
+    if (queryVector.length > 0 && atlasIndex) {
+      // MongoDB Atlas Vector Search — scales to millions of chunks. The index
+      // must map "embedding" (vector) and "projectId" + "status" (filter).
+      try {
+        const hits = await Knowledge.aggregate([
+          {
+            $vectorSearch: {
+              index: atlasIndex,
+              path: 'embedding',
+              queryVector,
+              numCandidates: Math.max(100, limit * 20),
+              limit,
+              filter: { projectId: bot.projectId, status: 'active' },
+            },
+          } as any,
+          { $project: { question: 1, answer: 1, sourceType: 1, sourceFile: 1, sourceUrl: 1, score: { $meta: 'vectorSearchScore' } } },
+        ]);
+        hits.filter((h: any) => h.score >= threshold).forEach((h: any) => picked.set(String(h._id), h));
+      } catch (err) {
+        console.warn('[rag] Atlas vector search failed, using in-memory similarity:', (err as Error).message);
+      }
+    }
+    if (queryVector.length > 0 && picked.size === 0) {
       const candidates = await Knowledge.find({ ...base, 'embedding.0': { $exists: true } })
         .select('question answer sourceType sourceFile sourceUrl embedding')
         .limit(MAX_VECTOR_CANDIDATES)
@@ -63,9 +86,27 @@ export class RagQueryService {
     query: string, 
     sessionId: string,
     history: any[] = []
-  ): Promise<{ message: string; sources: any[] }> {
+  ): Promise<{ message: string; sources: any[]; handoff?: string }> {
     const bot = await RagBot.findById(botId);
     if (!bot) throw new Error('Bot not found');
+
+    const existing = await RagConversation.findOne({ sessionId }).select('handoff');
+    const handoff = existing?.handoff?.status;
+    if (handoff === 'human' || handoff === 'requested') {
+      await RagConversation.updateOne(
+        { _id: existing!._id },
+        {
+          $push: { messages: { role: 'user', content: query, timestamp: new Date() } },
+          $inc: { unreadForAgent: 1 },
+          $set: { lastMessageAt: new Date() },
+        }
+      );
+      return { message: '', sources: [], handoff };
+    }
+
+    // Plan allowance for chatbot replies
+    const { assertWithinLimit } = await import('./usageService.js');
+    await assertWithinLimit(bot.tenantId, 'botMessages');
 
     // Public widget calls carry no login — attribute AI usage to the bot owner
     return runWithAIContext(
@@ -168,6 +209,7 @@ ${historyText}
       timestamp: new Date()
     });
 
+    conversation.lastMessageAt = new Date();
     await conversation.save();
 
     // Update bot message count

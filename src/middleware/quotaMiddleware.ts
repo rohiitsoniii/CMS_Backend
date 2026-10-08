@@ -4,6 +4,8 @@ import { Project } from '../models/Project';
 import { Content } from '../models/Content';
 import { TeamMember } from '../models/TeamMember.js';
 
+const quotaCache = new Map<string, { over: boolean; limit: number; until: number }>();
+
 export class QuotaMiddleware {
   // Check if tenant can create project
   static async checkProjectQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -148,42 +150,47 @@ export class QuotaMiddleware {
     }
   }
 
-  // Check API rate limit
+  /**
+   * Meter API calls against the plan's monthly allowance.
+   *
+   * Mounted on authenticated routers (after the tenant is known — never from a
+   * client-supplied header). Counting is a single atomic $inc after the
+   * response; enforcement uses a short-lived cache so the hot path does no
+   * extra DB reads.
+   */
   static async checkAPIRateLimit(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const tenantId = req.user?.tenantId || req.headers['x-tenant-id'] as string;
-      if (!tenantId) {
-        return next();
-      }
+    const tenantId = req.tenantId ? String(req.tenantId) : undefined;
+    if (!tenantId) return next();
 
-      const subscription = await Subscription.findOne({ tenantId }).populate('planId');
-      if (!subscription) {
-        return next();
-      }
-
-      const plan = subscription.planId as any;
-
-      // Check monthly API calls
-      if (subscription.usage.apiCallsThisMonth >= plan.limits.apiCallsPerMonth) {
-        res.status(429).json({
-          error: 'API call limit reached',
-          message: `Your plan allows ${plan.limits.apiCallsPerMonth} API calls per month. Upgrade for more.`,
-          current: subscription.usage.apiCallsThisMonth,
-          limit: plan.limits.apiCallsPerMonth,
-          upgradeUrl: '/billing/upgrade'
-        });
-        return;
-      }
-
-      // Increment API call count
-      subscription.usage.apiCallsThisMonth += 1;
-      await subscription.save();
-
-      return next();
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    const cached = quotaCache.get(tenantId);
+    if (cached && cached.until > Date.now() && cached.over) {
+      res.status(429).json({
+        success: false,
+        error: 'API call limit reached',
+        message: `Your plan allows ${cached.limit.toLocaleString()} API calls per month. Upgrade for more.`,
+        limit: cached.limit,
+        upgradeUrl: '/dashboard/billing',
+      });
       return;
     }
+
+    res.on('finish', () => {
+      if (res.statusCode >= 500) return;
+      Subscription.findOneAndUpdate(
+        { tenantId },
+        { $inc: { 'usage.apiCallsThisMonth': 1 } },
+        { new: true, projection: { 'usage.apiCallsThisMonth': 1, planId: 1 } }
+      )
+        .populate('planId', 'limits.apiCallsPerMonth')
+        .lean()
+        .then((sub: any) => {
+          const limit = sub?.planId?.limits?.apiCallsPerMonth;
+          if (!sub || !limit || limit < 0) return;
+          quotaCache.set(tenantId, { over: sub.usage.apiCallsThisMonth >= limit, limit, until: Date.now() + 60_000 });
+        })
+        .catch(() => undefined);
+    });
+    return next();
   }
 
   // Get quota status

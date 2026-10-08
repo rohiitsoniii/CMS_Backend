@@ -1,6 +1,5 @@
 import { Types } from 'mongoose';
-import fs from 'fs/promises';
-import path from 'path';
+import { getObjectStorage } from './objectStorage.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { runInTransaction } from '../utils/transactions.js';
 import { Project } from '../models/Project.js';
@@ -28,14 +27,18 @@ interface BackupData {
   teamMembers: any[];
 }
 
+const PREFIX = 'backups';
+
 export class BackupService {
-  private static backupDir = path.join(process.cwd(), 'backups');
+  private static get storage() {
+    return getObjectStorage();
+  }
 
   /**
-   * Resolve a backup filename to an absolute path, rejecting any attempt to
-   * traverse outside the backup directory (path traversal defence).
+   * Validate a backup filename and map it to a storage key, rejecting any
+   * attempt to traverse outside the backup prefix (path traversal defence).
    */
-  private static resolvePath(filename: string): string {
+  private static resolveKey(filename: string): string {
     if (
       typeof filename !== 'string' ||
       filename.length === 0 ||
@@ -47,22 +50,21 @@ export class BackupService {
     ) {
       throw new AppError('Invalid backup filename', 400);
     }
-    const filepath = path.join(this.backupDir, filename);
-    if (!filepath.startsWith(this.backupDir + path.sep)) {
-      throw new AppError('Invalid backup filename', 400);
-    }
-    return filepath;
+    return `${PREFIX}/${filename}`;
   }
 
-  /**
-   * Initialize backup directory
-   */
+  /** Kept for existing callers; object storage needs no setup. */
   static async init(): Promise<void> {
-    try {
-      await fs.mkdir(this.backupDir, { recursive: true });
-    } catch (error) {
-      console.error('Failed to create backup directory:', error);
-    }
+    /* no-op */
+  }
+
+  private static async write(filename: string, data: unknown, tenantId: string) {
+    const json = JSON.stringify(data, null, 2);
+    const { size } = await this.storage.put(`${PREFIX}/${filename}`, json, {
+      contentType: 'application/json',
+      metadata: { tenantid: tenantId },
+    });
+    return { filename, size, path: `${this.storage.driver}:${PREFIX}/${filename}` };
   }
 
   /**
@@ -73,8 +75,6 @@ export class BackupService {
     size: number;
     path: string;
   }> {
-    await this.init();
-
     const projectIds = (await Project.find({ tenantId }).select('_id').lean()).map(
       (p) => p._id
     );
@@ -96,19 +96,7 @@ export class BackupService {
       teamMembers: await TeamMember.find({ projectId: { $in: projectIds } }).lean(),
     };
 
-    const filename = `backup-${tenantId}-${Date.now()}.json`;
-    const filepath = path.join(this.backupDir, filename);
-    const jsonData = JSON.stringify(data, null, 2);
-
-    await fs.writeFile(filepath, jsonData, 'utf-8');
-
-    const stats = await fs.stat(filepath);
-
-    return {
-      filename,
-      size: stats.size,
-      path: filepath,
-    };
+    return this.write(`backup-${tenantId}-${Date.now()}.json`, data, String(tenantId));
   }
 
   /**
@@ -122,11 +110,9 @@ export class BackupService {
     size: number;
     path: string;
   }> {
-    await this.init();
-
     const project = await Project.findOne({ _id: projectId, tenantId });
     if (!project) {
-      throw new Error('Project not found');
+      throw new AppError('Project not found', 404);
     }
 
     const data = {
@@ -143,54 +129,34 @@ export class BackupService {
       teamMembers: await TeamMember.find({ projectId }).lean(),
     };
 
-    const filename = `backup-project-${projectId}-${Date.now()}.json`;
-    const filepath = path.join(this.backupDir, filename);
-    const jsonData = JSON.stringify(data, null, 2);
-
-    await fs.writeFile(filepath, jsonData, 'utf-8');
-
-    const stats = await fs.stat(filepath);
-
-    return {
-      filename,
-      size: stats.size,
-      path: filepath,
-    };
+    return this.write(`backup-project-${projectId}-${Date.now()}.json`, data, String(tenantId));
   }
 
   /**
-   * Read just the head of a backup file to extract its tenantId without
-   * loading the whole document (tenantId is serialized near the top).
+   * Owner of a backup: object metadata when available, else the tenantId
+   * serialized near the top of the file (older backups / local driver).
+   * Returns null when the backup does not exist.
    */
-  private static async readTenantId(filepath: string): Promise<string | undefined> {
-    const handle = await fs.open(filepath, 'r');
-    try {
-      const { buffer } = await handle.read(Buffer.alloc(2048), 0, 2048, 0);
-      const match = buffer.toString('utf-8').match(/"tenantId"\s*:\s*"([^"]+)"/);
-      return match?.[1];
-    } finally {
-      await handle.close();
-    }
+  private static async ownerOf(key: string): Promise<string | undefined | null> {
+    const head = await this.storage.head(key);
+    if (!head) return null;
+    if (head.metadata?.tenantid) return head.metadata.tenantid;
+    const start = await this.storage.readStart(key, 2048);
+    const match = start?.toString('utf-8').match(/"tenantId"\s*:\s*"([^"]+)"/);
+    return match?.[1];
   }
 
   /**
-   * Ensure the requesting tenant owns the backup file, else 403.
-   * No-op when tenantId is absent (super-admin / system contexts).
+   * Ensure the requesting tenant owns the backup, else 403/404.
+   * Ownership is skipped when tenantId is absent (super-admin / system contexts).
    */
   private static async assertTenantOwnership(
-    filepath: string,
+    key: string,
     tenantId?: Types.ObjectId | string | null
   ): Promise<void> {
+    const owner = await this.ownerOf(key);
+    if (owner === null) throw new AppError('Backup not found', 404);
     if (!tenantId) return;
-    let owner: string | undefined;
-    try {
-      owner = await this.readTenantId(filepath);
-    } catch (error: any) {
-      if (error?.code === 'ENOENT') {
-        throw new AppError('Backup not found', 404);
-      }
-      owner = undefined;
-    }
     if (owner !== String(tenantId)) {
       throw new AppError('Backup does not belong to this tenant', 403);
     }
@@ -210,26 +176,21 @@ export class BackupService {
       type: 'full' | 'project';
     }>
   > {
-    await this.init();
-
-    const files = await fs.readdir(this.backupDir);
+    const objects = await this.storage.list(PREFIX);
     const backups = [];
 
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
+    for (const obj of objects) {
+      const file = obj.key.slice(PREFIX.length + 1);
+      if (!file.endsWith('.json') || file.includes('/')) continue;
       if (projectId && !file.startsWith(`backup-project-${projectId}-`)) continue;
-
-      const filepath = path.join(this.backupDir, file);
       if (tenantId) {
-        const owner = await this.readTenantId(filepath).catch(() => undefined);
+        const owner = await this.ownerOf(obj.key).catch(() => undefined);
         if (owner !== String(tenantId)) continue;
       }
-      const stats = await fs.stat(filepath);
-
       backups.push({
         filename: file,
-        size: stats.size,
-        created: stats.birthtime,
+        size: obj.size,
+        created: obj.lastModified,
         type: file.includes('project') ? 'project' as const : 'full' as const,
       });
     }
@@ -249,21 +210,16 @@ export class BackupService {
     filename: string,
     tenantId: Types.ObjectId
   ): Promise<void> {
-    const filepath = this.resolvePath(filename);
+    const key = this.resolveKey(filename);
 
-    let jsonData: string;
-    try {
-      jsonData = await fs.readFile(filepath, 'utf-8');
-    } catch (error: any) {
-      if (error?.code === 'ENOENT') {
-        throw new AppError('Backup not found', 404);
-      }
-      throw error;
+    const raw = await this.storage.get(key);
+    if (!raw) {
+      throw new AppError('Backup not found', 404);
     }
 
     let data: BackupData & { projectId?: string; project?: any };
     try {
-      data = JSON.parse(jsonData);
+      data = JSON.parse(raw.toString('utf-8'));
     } catch {
       throw new AppError('Backup file is corrupted', 400);
     }
@@ -340,61 +296,49 @@ export class BackupService {
   }
 
   /**
-   * Delete backup file (must belong to the requesting tenant)
+   * Delete backup (must belong to the requesting tenant)
    */
   static async deleteBackup(
     filename: string,
     tenantId?: Types.ObjectId | string | null
   ): Promise<void> {
-    const filepath = this.resolvePath(filename);
-    await this.assertTenantOwnership(filepath, tenantId);
-    try {
-      await fs.unlink(filepath);
-    } catch (error: any) {
-      if (error?.code === 'ENOENT') {
-        throw new AppError('Backup not found', 404);
-      }
-      throw error;
-    }
+    const key = this.resolveKey(filename);
+    await this.assertTenantOwnership(key, tenantId);
+    await this.storage.delete(key);
   }
 
   /**
-   * Download backup file path (validated + tenant-owned)
+   * Read a backup for download (validated + tenant-owned)
    */
-  static async getBackupPath(
+  static async getBackupContent(
     filename: string,
     tenantId?: Types.ObjectId | string | null
-  ): Promise<string> {
-    const filepath = this.resolvePath(filename);
-    await this.assertTenantOwnership(filepath, tenantId);
-    return filepath;
+  ): Promise<Buffer> {
+    const key = this.resolveKey(filename);
+    await this.assertTenantOwnership(key, tenantId);
+    const data = await this.storage.get(key);
+    if (!data) throw new AppError('Backup not found', 404);
+    return data;
   }
 
   /**
-   * Auto-cleanup old backups (keep backups newer than daysToKeep)
+   * Remove backups older than daysToKeep. Scoped to one tenant when given;
+   * every tenant only for system jobs.
    */
-  static async cleanupOldBackups(daysToKeep: number = 30): Promise<number> {
+  static async cleanupOldBackups(daysToKeep: number = 30, tenantId?: Types.ObjectId | string | null): Promise<number> {
     if (!Number.isFinite(daysToKeep) || daysToKeep < 1 || daysToKeep > 3650) {
       throw new AppError('daysToKeep must be a number between 1 and 3650', 400);
     }
-    await this.init();
-
-    const files = await fs.readdir(this.backupDir);
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
-
+    const cutoff = Date.now() - daysToKeep * 86_400_000;
     let deletedCount = 0;
 
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const filepath = path.join(this.backupDir, file);
-        const stats = await fs.stat(filepath);
-
-        if (stats.birthtime < cutoffDate) {
-          await fs.unlink(filepath);
-          deletedCount++;
-        }
+    for (const obj of await this.storage.list(PREFIX)) {
+      if (!obj.key.endsWith('.json') || obj.lastModified.getTime() >= cutoff) continue;
+      if (tenantId) {
+        const owner = await this.ownerOf(obj.key).catch(() => undefined);
+        if (owner !== String(tenantId)) continue;
       }
+      if (await this.storage.delete(obj.key)) deletedCount++;
     }
 
     return deletedCount;

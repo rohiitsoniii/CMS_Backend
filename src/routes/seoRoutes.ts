@@ -56,4 +56,16 @@ router.get('/:projectId/seo/geo/:contentId', suite.geoForContent);
 router.get('/:projectId/seo/pagespeed', suite.pageSpeed);
 router.post('/:projectId/seo/keywords/check', suite.checkRanks);
 
+// Google Search Console
+router.get('/:projectId/seo/gsc', suite.gscStatus);
+router.get('/:projectId/seo/gsc/connect-url', requirePermission('settings:update'), suite.gscConnectUrl);
+router.get('/:projectId/seo/gsc/sites', suite.gscSites);
+router.put('/:projectId/seo/gsc/site', requirePermission('settings:update'), suite.gscSelectSite);
+router.get('/:projectId/seo/gsc/performance', suite.gscPerformance);
+router.delete('/:projectId/seo/gsc', requirePermission('settings:update'), suite.gscDisconnect);
+
+// Content brief + live GEO scoring
+router.post('/:projectId/seo/brief', suite.contentBrief);
+router.post('/:projectId/seo/geo/analyze', suite.analyzeDraft);
+
 export default router;

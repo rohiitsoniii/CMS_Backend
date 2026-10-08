@@ -4,11 +4,31 @@ import { Plan } from '../models/Plan';
 import { Invoice } from '../models/Invoice';
 import { Tenant } from '../models/Tenant';
 import { CouponService } from './CouponService.js';
+import { User } from '../models/User';
+import { mailerService } from './mailerService.js';
 
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder_key_for_development', {
   apiVersion: '2026-03-25.dahlia'
 });
+
+/** True when a real Stripe key is configured. */
+export const billingConfigured = () =>
+  Boolean(process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.includes('placeholder'));
+
+const appUrl = () => (process.env.FRONTEND_URL || 'http://localhost:5174').replace(/\/+$/, '');
+
+/** Email the workspace owner(s) about billing events. Never throws. */
+async function notifyOwners(tenantId: unknown, subject: string, html: string) {
+  try {
+    const owners = await User.find({ tenantId, role: { $in: ['owner', 'admin'] }, isActive: { $ne: false } }).select('email').lean();
+    const tenant = await Tenant.findById(tenantId).select('email').lean();
+    const to = [...new Set([...owners.map((o: any) => o.email), (tenant as any)?.email].filter(Boolean))];
+    if (to.length) await mailerService.send({ category: 'system', to, subject, html });
+  } catch (err) {
+    console.error('[billing] owner notification failed:', (err as Error).message);
+  }
+}
 
 export class BillingService {
   // Create Stripe customer
@@ -296,6 +316,15 @@ export class BillingService {
       subscription.status = 'canceled';
       subscription.canceledAt = new Date();
       await subscription.save();
+
+      // Fall back to the free plan so limits match what is being paid for
+      await Tenant.updateOne({ _id: subscription.tenantId }, { 'subscription.plan': 'free' });
+      await notifyOwners(
+        subscription.tenantId,
+        'Your subscription has ended',
+        `<p>Your subscription has been cancelled and your workspace is now on the Free plan.</p>
+         <p>Your content is safe. To restore your plan's limits, <a href="${appUrl()}/dashboard/billing">choose a plan</a>.</p>`
+      );
     }
   }
 
@@ -336,7 +365,18 @@ export class BillingService {
       subscription.status = 'past_due';
       await subscription.save();
 
-      // TODO: Send email notification about failed payment
+      const amount = typeof invAny.amount_due === 'number'
+        ? `${(invAny.amount_due / 100).toFixed(2)} ${String(invAny.currency || '').toUpperCase()}`
+        : 'your invoice';
+      const retry = invAny.next_payment_attempt ? new Date(invAny.next_payment_attempt * 1000).toDateString() : null;
+      await notifyOwners(
+        subscription.tenantId,
+        'Action needed: your payment failed',
+        `<p>We couldn't charge ${amount} for your subscription.</p>
+         ${retry ? `<p>We'll retry on <strong>${retry}</strong>.</p>` : ''}
+         <p>Please <a href="${appUrl()}/dashboard/billing">update your payment method</a> to avoid losing access to paid features.</p>
+         ${invAny.hosted_invoice_url ? `<p>You can also <a href="${invAny.hosted_invoice_url}">pay the invoice directly</a>.</p>` : ''}`
+      );
     }
   }
 
@@ -380,3 +420,36 @@ export class BillingService {
 
 // Export Subscription type
 export type { ISubscription } from '../models/Subscription';
+
+/**
+ * Bill the monthly platform fee for workspaces that bring their own AI key.
+ * Adds a pending Stripe invoice item (picked up by the next subscription
+ * invoice). Idempotent per month via AIProviderConfig.feeBilledMonth and a
+ * Stripe idempotency key.
+ */
+export async function billByokFees(): Promise<number> {
+  if (!billingConfigured()) return 0;
+  const { AIProviderConfig } = await import('../models/AIProviderConfig.js');
+  const { BYOK_MONTHLY_FEE_USD } = await import('./aiGateway.js');
+  const fee = Math.round(BYOK_MONTHLY_FEE_USD() * 100);
+  if (fee <= 0) return 0;
+  const month = new Date().toISOString().slice(0, 7);
+  let billed = 0;
+  const configs = await AIProviderConfig.find({ isActive: true, feeBilledMonth: { $ne: month } }).limit(500);
+  for (const cfg of configs) {
+    const sub = await Subscription.findOne({ tenantId: cfg.tenantId, status: { $in: ['active', 'trialing', 'past_due'] } });
+    if (!sub?.stripeCustomerId) continue;
+    try {
+      await stripe.invoiceItems.create(
+        { customer: sub.stripeCustomerId, amount: fee, currency: 'usd', description: `AI bring-your-own-key platform fee (${month})` },
+        { idempotencyKey: `byok-${cfg.tenantId}-${month}` }
+      );
+      cfg.feeBilledMonth = month;
+      await cfg.save();
+      billed++;
+    } catch (err) {
+      console.error('[billing] BYOK fee failed for', String(cfg.tenantId), (err as Error).message);
+    }
+  }
+  return billed;
+}

@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { withJobLock } from '../utils/jobLock.js';
 import { WebhookLog } from '../models/WebhookLog.js';
 import Webhook from '../models/Webhook.js';
 import { WebhookLogService } from '../services/webhookLogService.js';
@@ -70,13 +71,13 @@ class WebhookRetryWorker {
     console.log('[webhook-retry] worker started (every minute)');
 
     this.task = cron.schedule('* * * * *', () => {
-      void this.processDueRetries();
+      void withJobLock('webhook-retry', 5 * 60_000, () => this.processDueRetries());
     });
 
     // Initial delayed sweep so a restart picks up overdue logs quickly
     // without blocking boot. unref so tests/CLI don't hang on the timer.
     this.initialTimeout = setTimeout(() => {
-      void this.processDueRetries();
+      void withJobLock('webhook-retry', 5 * 60_000, () => this.processDueRetries());
     }, 10_000);
     const t = this.initialTimeout as unknown as { unref?: () => void };
     if (typeof t.unref === 'function') t.unref();

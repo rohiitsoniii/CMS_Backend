@@ -69,6 +69,15 @@ export interface ISeoSettings extends Document {
     includeFullText: boolean; // serve llms-full.txt
   };
 
+  gsc?: {
+    connected: boolean;
+    email?: string;
+    siteUrl?: string;
+    /** encrypted */
+    refreshToken?: string;
+    connectedAt?: Date;
+  };
+
   updatedBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -123,6 +132,13 @@ const SeoSettingsSchema = new Schema<ISeoSettings>(
       details: { type: String, trim: true, maxlength: 5000 },
       contentTypes: { type: [String], default: [] },
       includeFullText: { type: Boolean, default: true },
+    },
+    gsc: {
+      connected: { type: Boolean, default: false },
+      email: String,
+      siteUrl: String,
+      refreshToken: { type: String, select: false },
+      connectedAt: Date,
     },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },

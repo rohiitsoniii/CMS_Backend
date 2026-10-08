@@ -60,6 +60,8 @@ export interface ISMTPConfig extends Document {
     physicalAddress?: string;
     /** Require email confirmation for public sign-ups */
     doubleOptIn: boolean;
+    /** Secret in the bounce/complaint webhook URL */
+    eventsToken?: string;
 
     // Limits (platform SMTP only)
     limits?: IEmailLimits;
@@ -126,6 +128,7 @@ const SMTPConfigSchema = new Schema<ISMTPConfig>(
         replyTo: { type: String, trim: true, lowercase: true },
         physicalAddress: { type: String, trim: true, maxlength: 500 },
         doubleOptIn: { type: Boolean, default: false },
+        eventsToken: { type: String, select: false },
         limits: { type: EmailLimitsSchema, default: () => ({}) },
         isActive: { type: Boolean, default: true },
         isVerified: { type: Boolean, default: false },

@@ -26,7 +26,7 @@ import collaborationService from './services/collaborationService.js';
 import { scheduledPublishWorker } from './workers/scheduledPublishWorker.js';
 import { webhookRetryWorker } from './workers/webhookRetryWorker.js';
 import { emailCampaignWorker } from './workers/emailCampaignWorker.js';
-import { checkAPIRateLimit } from './middleware/quotaMiddleware.js';
+import { billingWorker } from './workers/billingWorker.js';
 import { aiContextMiddleware } from './services/aiGateway.js';
 import { serveEmbedScript } from './utils/embedScripts.js';
 
@@ -146,7 +146,7 @@ const startServer = async () => {
     });
 
     // Embed scripts (chat widget, signup form) with this deployment's URLs baked in
-    app.get(['/widget.js', '/subscribe.js'], serveEmbedScript);
+    app.get(['/widget.js', '/subscribe.js', '/tracker.js', '/form.js', '/popup.js'], serveEmbedScript);
 
     // Static Files
     app.use(express.static('public'));
@@ -179,8 +179,6 @@ const startServer = async () => {
     });
     app.use(globalLimiter);
 
-    // API Rate Limit (Quota-based)
-    app.use('/api/v1', checkAPIRateLimit);
 
     // Usage Logger
     app.use(usageLogger);
@@ -275,6 +273,7 @@ const startServer = async () => {
     scheduledPublishWorker.start();
     webhookRetryWorker.start();
     emailCampaignWorker.start();
+    billingWorker.start();
 
     // Graceful Shutdown Logic
     const shutdown = async (signal: string) => {

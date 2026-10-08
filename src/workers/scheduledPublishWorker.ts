@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { Content } from '../models/index.js';
 import { webhookService } from '../services/webhookService.js';
 import { contentEvents } from '../services/contentEvents.js';
+import { withJobLock } from '../utils/jobLock.js';
 
 /**
  * Worker that runs every minute to publish or unpublish scheduled content.
@@ -17,7 +18,7 @@ class ScheduledPublishWorker {
 
         // Run every minute at the 0th second
         cron.schedule('* * * * *', async () => {
-             await this.processScheduledContent();
+             await withJobLock('scheduled-publish', 5 * 60_000, () => this.processScheduledContent());
         });
     }
 

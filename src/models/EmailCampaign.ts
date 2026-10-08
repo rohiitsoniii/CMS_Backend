@@ -5,6 +5,12 @@ export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'pause
 export interface IEmailCampaign extends Document {
     projectId: mongoose.Types.ObjectId;
     tenantId?: mongoose.Types.ObjectId;
+    /** Set for campaigns created by an automation */
+    automationId?: mongoose.Types.ObjectId;
+    /** content_published automations: the entry that triggered it */
+    sourceContentId?: mongoose.Types.ObjectId;
+    /** Automation newsletters are listed with campaigns; step emails are not */
+    showInCampaigns?: boolean;
 
     // Campaign Info
     name: string;
@@ -57,6 +63,9 @@ const EmailCampaignSchema = new Schema<IEmailCampaign>(
     {
         projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
         tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', index: true },
+        automationId: { type: Schema.Types.ObjectId, ref: 'EmailAutomation', index: { sparse: true } },
+        sourceContentId: { type: Schema.Types.ObjectId, ref: 'Content' },
+        showInCampaigns: { type: Boolean },
         name: { type: String, required: true, trim: true, maxlength: 200 },
         subject: { type: String, required: true, trim: true, maxlength: 300 },
         previewText: { type: String, trim: true, maxlength: 300 },

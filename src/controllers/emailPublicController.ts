@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { Project } from '../models/index.js';
 import { SMTPConfig } from '../models/SMTPConfig.js';
+import crypto from 'crypto';
+import { parseProviderEvents, applyEmailEvents } from '../services/emailDeliverabilityService.js';
 import { asyncHandler } from '../middleware/index.js';
 import {
     subscribe,
@@ -160,4 +162,31 @@ export const clickRedirect = asyncHandler(async (req: Request, res: Response) =>
         return;
     }
     res.redirect(302, dest);
+});
+
+// ---------------------------------------------------------------------------
+// Provider bounce / complaint events
+// ---------------------------------------------------------------------------
+
+export const providerEvents = asyncHandler(async (req: Request, res: Response) => {
+    const { projectId, token } = req.params;
+    if (!Types.ObjectId.isValid(projectId)) {
+        res.status(404).end();
+        return;
+    }
+    const settings = await SMTPConfig.findOne({ projectId }).select('+eventsToken').lean();
+    const expected = (settings as any)?.eventsToken || '';
+    const ok = expected && token.length === expected.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+    if (!ok) {
+        res.status(404).end();
+        return;
+    }
+    let body = req.body;
+    // SNS posts JSON with a text/plain content type
+    if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch { body = {}; }
+    }
+    const events = await parseProviderEvents(body);
+    const applied = await applyEmailEvents(projectId, events);
+    res.json({ success: true, data: { applied } });
 });

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { EndUser } from '../models/EndUser';
 import jwt from 'jsonwebtoken';
 import { mailerService } from '../services/mailerService.js';
+import { endUserLink } from '../services/endUserLinks.js';
 
 export class EndUserController {
     // Register new end user (PUBLIC)
@@ -479,7 +480,7 @@ export class EndUserController {
     // Helper: Send verification email
     private async sendVerificationEmail(user: any, token: string) {
         try {
-            const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+            const verificationUrl = await endUserLink(user.projectId, 'verifyEmail', token);
 
             // End-user mail goes through the project's own SMTP when configured
             await mailerService.send({
@@ -504,7 +505,7 @@ export class EndUserController {
     // Helper: Send password reset email
     private async sendPasswordResetEmail(user: any, token: string) {
         try {
-            const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+            const resetUrl = await endUserLink(user.projectId, 'resetPassword', token);
 
             await mailerService.send({
                 projectId: user.projectId,

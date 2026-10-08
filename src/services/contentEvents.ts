@@ -45,6 +45,10 @@ export const contentEvents = {
     }
     background('knowledge sync', withTenant(content, () => ragIngestionService.syncContentItem(content)));
     background('search engine ping', () => seoPingService.contentPublished(content));
+    background('newsletter automations', async () => {
+      const { onContentPublished } = await import('./automationService.js');
+      return onContentPublished(content);
+    });
   },
 
   unpublished(content: ContentLike, opts: { webhook?: boolean } = { webhook: true }) {

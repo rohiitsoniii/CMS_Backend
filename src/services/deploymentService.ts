@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { safePost } from '../utils/safeFetch.js';
 import DeploymentIntegration from '../models/DeploymentIntegration';
 
 export class DeploymentService {
@@ -33,7 +33,7 @@ export class DeploymentService {
       await integration.save();
 
       // Trigger the build hook
-      await axios.post(integration.hookUrl);
+      await safePost(integration.hookUrl);
 
       integration.lastDeployStatus = 'success';
       integration.lastDeployAt = new Date();

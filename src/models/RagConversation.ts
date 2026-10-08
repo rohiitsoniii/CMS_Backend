@@ -17,8 +17,9 @@ export interface IRagConversation extends Document {
   visitorEmail?: string;
   
   messages: {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'agent' | 'system';
     content: string;
+    agentName?: string;
     sources?: Types.ObjectId[]; // IDs of Knowledge chunks used
     feedback?: 'helpful' | 'not_helpful';
     timestamp: Date;
@@ -32,6 +33,16 @@ export interface IRagConversation extends Document {
   };
   
   satisfaction?: number; // 1-5 rating
+
+  // Human takeover
+  handoff: {
+    status: 'bot' | 'requested' | 'human' | 'closed';
+    requestedAt?: Date;
+    assignedTo?: Types.ObjectId;
+    assignedName?: string;
+  };
+  lastMessageAt?: Date;
+  unreadForAgent: number;
   
   createdAt: Date;
   updatedAt: Date;
@@ -72,9 +83,10 @@ const RagConversationSchema = new Schema<IRagConversation>(
       {
         role: {
           type: String,
-          enum: ['user', 'assistant'],
+          enum: ['user', 'assistant', 'agent', 'system'],
           required: true,
         },
+        agentName: String,
         content: {
           type: String,
           required: true,
@@ -108,6 +120,15 @@ const RagConversationSchema = new Schema<IRagConversation>(
       min: 1,
       max: 5,
     },
+
+    handoff: {
+      status: { type: String, enum: ['bot', 'requested', 'human', 'closed'], default: 'bot' },
+      requestedAt: Date,
+      assignedTo: { type: Schema.Types.ObjectId, ref: 'User' },
+      assignedName: String,
+    },
+    lastMessageAt: Date,
+    unreadForAgent: { type: Number, default: 0 },
   },
   {
     timestamps: true,
@@ -117,5 +138,6 @@ const RagConversationSchema = new Schema<IRagConversation>(
 // Indexes for analytics efficiently
 RagConversationSchema.index({ botId: 1, createdAt: -1 });
 RagConversationSchema.index({ sessionId: 1 }, { unique: true });
+RagConversationSchema.index({ projectId: 1, 'handoff.status': 1, lastMessageAt: -1 });
 
 export const RagConversation = mongoose.model<IRagConversation>('RagConversation', RagConversationSchema);

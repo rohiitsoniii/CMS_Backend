@@ -54,9 +54,11 @@ export const listBackups = asyncHandler(async (req: Request, res: Response): Pro
 export const downloadBackup = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { filename } = req.params;
 
-  const filepath = await BackupService.getBackupPath(filename, req.tenantId as any);
+  const content = await BackupService.getBackupContent(filename, req.tenantId as any);
 
-  res.download(filepath, filename);
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(content);
 });
 
 /**
@@ -108,7 +110,8 @@ export const deleteBackup = asyncHandler(async (req: Request, res: Response): Pr
 export const cleanupBackups = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const daysToKeep = Number(req.body.daysToKeep ?? 30);
 
-  const deletedCount = await BackupService.cleanupOldBackups(daysToKeep);
+  // Only this tenant's backups — never other customers'
+  const deletedCount = await BackupService.cleanupOldBackups(daysToKeep, req.tenantId as any);
 
   await AuditService.log(req, 'backup.cleanup', {
     type: 'Backup',

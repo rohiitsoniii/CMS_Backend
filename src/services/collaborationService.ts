@@ -10,6 +10,7 @@
  */
 
 import { Server as HTTPServer } from 'http';
+import { config } from '../config/index.js';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 
@@ -60,7 +61,7 @@ class CollaborationService {
           return next(new Error('Authentication error'));
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+        const decoded = jwt.verify(token, config.jwt.secret) as any;
         socket.data.user = decoded;
         next();
       } catch (error) {

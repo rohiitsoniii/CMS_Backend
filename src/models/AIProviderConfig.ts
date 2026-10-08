@@ -67,6 +67,8 @@ export interface IAIProviderConfig extends Document {
     isVerified: boolean;
     lastTestedAt?: Date;
     lastError?: string;
+    /** YYYY-MM of the last BYOK platform fee billed */
+    feeBilledMonth?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -84,6 +86,7 @@ const AIProviderConfigSchema = new Schema<IAIProviderConfig>(
         isVerified: { type: Boolean, default: false },
         lastTestedAt: { type: Date },
         lastError: { type: String },
+        feeBilledMonth: { type: String },
     },
     {
         timestamps: true,

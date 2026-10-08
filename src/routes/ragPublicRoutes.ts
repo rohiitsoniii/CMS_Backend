@@ -12,5 +12,7 @@ router.get('/:botSlug/config', ragChatController.getWidgetConfig);
 router.post('/:botSlug/chat', ragChatController.ragChat);
 router.post('/:botSlug/rate', ragChatController.submitFeedback);
 router.post('/:botSlug/lead', ragChatController.captureLead);
+router.post('/:botSlug/handoff', ragChatController.requestHandoff);
+router.get('/:botSlug/messages', ragChatController.pollMessages);
 
 export default router;

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { safePost } from '../utils/safeFetch.js';
 import crypto from 'crypto';
 import Webhook, { IWebhook } from '../models/Webhook.js';
 import { WebhookLogService } from './webhookLogService.js';
@@ -95,7 +95,7 @@ export class WebhookService {
         headers['X-CMS-Signature'] = `sha256=${signature}`;
       }
 
-      const response = await axios.post(webhook.url, finalPayload, {
+      const response = await safePost(webhook.url, finalPayload, {
         headers,
         timeout: 5000
       });

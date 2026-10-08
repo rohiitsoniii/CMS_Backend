@@ -10,6 +10,10 @@ import { SMTPConfig, SMTP_PRESETS } from '../models/SMTPConfig.js';
 import { asyncHandler, AppError } from '../middleware/index.js';
 import { escapeSearchTerm } from '../utils/queryBuilder.js';
 import { mailerService } from '../services/mailerService.js';
+import { withJobLock } from '../utils/jobLock.js';
+import crypto from 'crypto';
+import { checkSenderDomain } from '../services/emailDeliverabilityService.js';
+import { publicApiBase } from '../services/emailMarketingService.js';
 import {
     buildSegmentFilter,
     audienceFilter,
@@ -485,7 +489,10 @@ function campaignFields(body: any) {
 
 export const listCampaigns = asyncHandler(async (req: Request, res: Response) => {
     const project = await loadProject(req);
-    const filter: Record<string, any> = { projectId: project._id };
+    const filter: Record<string, any> = {
+        projectId: project._id,
+        $or: [{ automationId: { $exists: false } }, { showInCampaigns: true }],
+    };
     if (typeof req.query.status === 'string' && req.query.status) filter.status = req.query.status;
     const campaigns = await EmailCampaign.find(filter).select('-htmlContent -textContent -customRecipients').sort({ createdAt: -1 }).limit(500);
     res.json({ success: true, data: campaigns });
@@ -595,7 +602,7 @@ export const sendCampaign = asyncHandler(async (req: Request, res: Response) => 
         throw new AppError('This audience has no subscribed contacts', 400);
     }
     // Kick off the first batch now; the worker continues the rest
-    sendCampaignBatch(campaign._id).catch((e) => console.error('[campaign] first batch failed', e));
+    withJobLock('email-campaigns', 5 * 60_000, () => sendCampaignBatch(campaign._id)).catch((e) => console.error('[campaign] first batch failed', e));
     res.json({ success: true, data: { totalRecipients: total }, message: `Sending to ${total} contacts` });
 });
 
@@ -634,7 +641,7 @@ export const resumeCampaign = asyncHandler(async (req: Request, res: Response) =
     campaign.status = 'sending';
     campaign.lastError = undefined;
     await campaign.save();
-    sendCampaignBatch(campaign._id).catch((e) => console.error('[campaign] resume batch failed', e));
+    withJobLock('email-campaigns', 5 * 60_000, () => sendCampaignBatch(campaign._id)).catch((e) => console.error('[campaign] resume batch failed', e));
     res.json({ success: true, data: campaign });
 });
 
@@ -752,4 +759,32 @@ export const testTemplate = asyncHandler(async (req: Request, res: Response) => 
         throw new AppError(`Test send failed: ${err.message}`, 400);
     }
     res.json({ success: true, message: `Test sent to ${to}` });
+});
+
+// ============================================================================
+// Deliverability
+// ============================================================================
+
+/** DNS health of the sender domain (SPF, DKIM, DMARC, MX). */
+export const checkDns = asyncHandler(async (req: Request, res: Response) => {
+    const project = await loadProject(req);
+    const settings = await SMTPConfig.findOne({ projectId: project._id });
+    const from = String(req.query.email || settings?.fromEmail || '');
+    try {
+        res.json({ success: true, data: await checkSenderDomain(from, settings?.preset || 'custom') });
+    } catch (err: any) {
+        throw new AppError(err.message, 400);
+    }
+});
+
+/** URL to paste into the provider's event webhook settings (creates the secret once). */
+export const eventsWebhook = asyncHandler(async (req: Request, res: Response) => {
+    const project = await loadProject(req);
+    const settings = await SMTPConfig.findOne({ projectId: project._id }).select('+eventsToken');
+    if (!settings) throw new AppError('Save your email settings first', 400);
+    if (!settings.eventsToken || req.query.rotate === '1') {
+        settings.eventsToken = crypto.randomBytes(20).toString('hex');
+        await settings.save();
+    }
+    res.json({ success: true, data: { url: `${publicApiBase()}/events/${project._id}/${settings.eventsToken}` } });
 });

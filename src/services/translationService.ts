@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { aiGateway } from './aiGateway.js';
 import { ILocaleConfig } from '../models/LocaleConfig';
 
 /**
@@ -73,13 +74,22 @@ class TranslationService {
         sourceLang: string = 'en'
     ): Promise<string> {
         if (!text || targetLang === sourceLang) return text;
-        if (!config.translationApiKey) {
-            throw new Error('Translation API key missing for tenant');
-        }
-
         // Check glossary first
         if (config.glossary && config.glossary[text]) {
             return config.glossary[text];
+        }
+
+        // No Google key → translate with AI (tenant's own key or plan credits)
+        if (!config.translationApiKey) {
+            const glossary = config.glossary && Object.keys(config.glossary).length
+                ? `\nAlways use these fixed translations: ${JSON.stringify(config.glossary).slice(0, 2000)}`
+                : '';
+            const out = await aiGateway.chat(
+                `Translate the following text from ${sourceLang} to ${targetLang}. Preserve all HTML tags, ` +
+                `attributes, URLs, placeholders like {{name}} and line breaks exactly. Reply with the translation only.${glossary}\n\n---\n${text}`,
+                { maxTokens: Math.min(4000, Math.ceil(text.length / 2) + 200), temperature: 0.2 }
+            );
+            return out.trim();
         }
 
         try {

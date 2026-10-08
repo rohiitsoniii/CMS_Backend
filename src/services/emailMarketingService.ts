@@ -5,6 +5,7 @@ import { EmailCampaign, IEmailCampaign } from '../models/EmailCampaign.js';
 import { CampaignRecipient } from '../models/CampaignRecipient.js';
 import { EmailSegment, ISegmentRule } from '../models/EmailSegment.js';
 import { SMTPConfig } from '../models/SMTPConfig.js';
+import { Project } from '../models/index.js';
 import { config } from '../config/index.js';
 import { escapeSearchTerm } from '../utils/queryBuilder.js';
 import { mailerService, QuotaExceededError } from './mailerService.js';
@@ -511,6 +512,11 @@ export async function subscribe(projectId: Types.ObjectId | string, input: Subsc
     const isNew = !sub;
 
     if (!sub) {
+        const project = await Project.findById(projectId).select('tenantId').lean();
+        if (project) {
+            const { assertWithinLimit } = await import('./usageService.js');
+            await assertWithinLimit((project as any).tenantId, 'contacts');
+        }
         sub = new EmailSubscriber({
             projectId,
             email,
@@ -544,7 +550,20 @@ export async function subscribe(projectId: Types.ObjectId | string, input: Subsc
         }
     }
 
+    const previousTags = new Set((await EmailSubscriber.findById(sub._id).select('tags').lean())?.tags || []);
+    const wasSubscribed = !isNew && (await EmailSubscriber.findById(sub._id).select('status').lean())?.status === 'subscribed';
     await sub.save();
+
+    // Automations (lazy import avoids a module cycle)
+    const { emitAudienceEvent } = await import('./automationService.js');
+    if (sub.status === 'subscribed' && !wasSubscribed) {
+        emitAudienceEvent(projectId, { type: 'subscribed', subscriberId: sub._id as Types.ObjectId, email: sub.email });
+    }
+    if (sub.status === 'subscribed') {
+        for (const t of tags.filter((x) => !previousTags.has(x))) {
+            emitAudienceEvent(projectId, { type: 'tag_added', subscriberId: sub._id as Types.ObjectId, email: sub.email, tag: t });
+        }
+    }
     return { subscriber: sub, isNew, needsConfirmation };
 }
 
@@ -576,5 +595,10 @@ export async function confirmSubscription(token: string): Promise<IEmailSubscrib
     sub.subscribedAt = new Date();
     sub.confirmToken = undefined;
     await sub.save();
+    const { emitAudienceEvent } = await import('./automationService.js');
+    emitAudienceEvent(sub.projectId, { type: 'subscribed', subscriberId: sub._id as Types.ObjectId, email: sub.email });
+    for (const t of sub.tags || []) {
+        emitAudienceEvent(sub.projectId, { type: 'tag_added', subscriberId: sub._id as Types.ObjectId, email: sub.email, tag: t });
+    }
     return sub;
 }
